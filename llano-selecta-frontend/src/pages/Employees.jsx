@@ -66,7 +66,7 @@ export default function Employees() {
       primaryRole: 'Warehouse Staff',
       secondaryRoles: ['Checker', 'Loader'],
       status: 'Active',
-      assignedArea: 'Bodega Central'
+      assignedArea: 'Warehouse'
     },
     {
       id: 'EMP-005',
@@ -385,7 +385,7 @@ export default function Employees() {
                   <option>Cabanglasan Area</option>
                   <option>Batangan Route</option>
                   <option>Valencia Hub</option>
-                  <option>Bodega Central</option>
+                  <option>Warehouse</option>
                 </select>
               </div>
             </div>

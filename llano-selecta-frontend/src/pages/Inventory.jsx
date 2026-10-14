@@ -18,119 +18,94 @@ import {
   Eye,
   Plus,
   Boxes,
-  RotateCcw
+  RotateCcw,
+  Truck
 } from 'lucide-react';
 import { formatPHP, formatDate } from '../utils/helpers';
+import { INITIAL_PRODUCTS, SELECTA_CATEGORIES } from '../utils/productCatalog';
 
 export default function Inventory() {
-  // Mock Products Stock Balance Master
-  const [stockBalances, setStockBalances] = useState([
-    {
-      id: 'PRD-001',
-      barcode: '480001612345',
-      name: 'Cornetto Vanilla 110ml',
-      category: 'Single Serve',
-      unitPrice: 28.00,
-      onHand: 180,
-      reserved: 30, // Allocated to active Bongo dispatch
-      minStock: 50,
-      unit: 'Pcs'
-    },
-    {
-      id: 'PRD-002',
-      barcode: '480001612346',
-      name: 'Cornetto Chocolate 110ml',
-      category: 'Single Serve',
-      unitPrice: 28.00,
-      onHand: 18, // Low Stock Alert
-      reserved: 0,
-      minStock: 50,
-      unit: 'Pcs'
-    },
-    {
-      id: 'PRD-003',
-      barcode: '480001612347',
-      name: 'Magnum Classic Almond 80ml',
-      category: 'Premium Single',
-      unitPrice: 58.00,
-      onHand: 112,
-      reserved: 10,
-      minStock: 30,
-      unit: 'Pcs'
-    },
-    {
-      id: 'PRD-004',
-      barcode: '480001612348',
-      name: 'Big Scoop Chocolate Fudge 1.5L',
-      category: 'Tubs & Pints',
-      unitPrice: 195.00,
-      onHand: 5, // Critical Stock Alert
-      reserved: 2,
-      minStock: 20,
-      unit: 'Tubs'
-    },
-    {
-      id: 'PRD-005',
-      barcode: '480001612349',
-      name: 'SELECTA 3-in-1 Double Dutch 1.3L',
-      category: 'Tubs & Pints',
-      unitPrice: 165.00,
-      onHand: 45,
-      reserved: 10,
-      minStock: 15,
-      unit: 'Tubs'
-    }
-  ]);
+  // Products Stock Master loaded from catalog with calculated reserves
+  const [stockBalances, setStockBalances] = useState(
+    INITIAL_PRODUCTS.map((p, index) => ({
+      id: p.id,
+      barcode: p.barcode,
+      name: p.name,
+      category: p.category,
+      unitPrice: Number(p.dealerPrice || p.unit_price),
+      onHand: p.stock || 50,
+      reserved: index % 3 === 0 ? 10 : 0, // Allocated to active Bongo dispatch
+      minStock: p.minStock || 20,
+      unit: p.unit || 'Pack/Tub'
+    }))
+  );
 
-  // FIFO Stock Ledger Logs
+  // FIFO Stock Ledger Logs reflecting system movements
   const [ledgerLogs, setLedgerLogs] = useState([
     {
       id: 'LEDG-2026-901',
       timestamp: '2026-10-09T09:30:00',
-      productId: 'PRD-001',
-      productName: 'Cornetto Vanilla 110ml',
-      type: 'Stock Receiving', // Inbound
+      productId: 'COR-001',
+      productName: 'CHOCOLATE',
+      category: 'CORNETTO',
+      type: 'Stock Receiving (Freezer Van)',
       changeQty: 195,
       runningOnHand: 180,
       referenceNo: 'RCV-2026-001',
       staff: 'Pedro Warehouse',
-      notes: 'Inbound truck delivery from SELECTA Bodega Panel #4'
+      notes: 'Inbound freezer van arrival from SELECTA Bodega Panel #4 (KAB-4819)'
     },
     {
       id: 'LEDG-2026-902',
       timestamp: '2026-10-09T08:15:00',
-      productId: 'PRD-001',
-      productName: 'Cornetto Vanilla 110ml',
-      type: 'Dispatch Allocation', // Outbound
-      changeQty: -30,
-      runningOnHand: 180,
+      productId: 'MAG-001',
+      productName: 'CLASSIC',
+      category: 'MAGNUM',
+      type: 'Dispatch Allocation (Bongo)',
+      changeQty: -20,
+      runningOnHand: 112,
       referenceNo: 'DISP-2026-101',
       staff: 'Juan Driver',
-      notes: 'Reserved for Bongo Truck #1 (Valencia -> San Fernando)'
+      notes: 'Reserved & loaded into Bongo Truck #1 (Valencia -> San Fernando)'
     },
     {
       id: 'LEDG-2026-903',
       timestamp: '2026-10-09T07:45:00',
-      productId: 'PRD-003',
-      productName: 'Magnum Classic Almond 80ml',
-      type: 'BO / Melted Return', // Adjustment
-      changeQty: -3,
-      runningOnHand: 112,
-      referenceNo: 'DISC-2026-002',
-      staff: 'Pedro Loader',
-      notes: 'Melted during delivery transition - store deduction applied'
+      productId: 'STK-001',
+      productName: 'COOKIES & CREAM',
+      category: 'STICKS',
+      type: 'Backload Return (Store Closed)',
+      changeQty: 15,
+      runningOnHand: 135,
+      referenceNo: 'BK-2026-1003',
+      staff: 'Roberto Backride',
+      notes: 'Returned from Cabanglasan loop; store closed upon arrival'
     },
     {
       id: 'LEDG-2026-904',
       timestamp: '2026-10-08T14:20:00',
-      productId: 'PRD-005',
-      productName: 'SELECTA 3-in-1 Double Dutch 1.3L',
-      type: 'Stock Receiving',
-      changeQty: 80,
-      runningOnHand: 45,
-      referenceNo: 'RCV-2026-002',
-      staff: 'Pedro Warehouse',
-      notes: 'Inbound truck delivery from SELECTA Bodega Panel #2'
+      productId: 'SUP-001',
+      productName: 'DOUBLE DUTCH',
+      category: 'SUPREME 1.3L',
+      type: 'BO / Melted Deduction',
+      changeQty: -2,
+      runningOnHand: 43,
+      referenceNo: 'DISC-2026-002',
+      staff: 'Pedro Loader',
+      notes: 'Tub seal crushed during freezer van transport transition'
+    },
+    {
+      id: 'LEDG-2026-905',
+      timestamp: '2026-10-08T11:00:00',
+      productId: 'COR-002',
+      productName: 'COOKIES & DREAM',
+      category: 'CORNETTO',
+      type: 'POS Walk-in Sale',
+      changeQty: -5,
+      runningOnHand: 90,
+      referenceNo: 'POS-2026-4401',
+      staff: 'Cashier Staff',
+      notes: 'Over-the-counter retail purchase'
     }
   ]);
 
@@ -141,14 +116,15 @@ export default function Inventory() {
 
   // Manual Adjustment Modal
   const [isAdjModalOpen, setIsAdjModalOpen] = useState(false);
-  const [adjProduct, setAdjProduct] = useState('PRD-001');
-  const [adjType, setAdjType] = useState('Inbound Receiving');
+  const [adjProduct, setAdjProduct] = useState(stockBalances[0]?.id || 'COR-001');
+  const [adjType, setAdjType] = useState('Stock Receiving (Freezer Van)');
   const [adjQty, setAdjQty] = useState(10);
   const [adjNotes, setAdjNotes] = useState('');
 
   // Total valuation metrics
   const totalValuation = stockBalances.reduce((sum, p) => sum + (p.onHand * p.unitPrice), 0);
   const totalOnHandUnits = stockBalances.reduce((sum, p) => sum + p.onHand, 0);
+  const totalReservedUnits = stockBalances.reduce((sum, p) => sum + p.reserved, 0);
   const lowStockCount = stockBalances.filter(p => p.onHand <= p.minStock).length;
 
   const handleSaveAdjustment = () => {
@@ -156,26 +132,24 @@ export default function Inventory() {
     if (!prod) return;
 
     const qtyNumber = parseInt(adjQty) || 0;
-    const isOutbound = adjType === 'Dispatch Allocation' || adjType === 'BO / Melted Return';
+    const isOutbound = adjType === 'Dispatch Allocation (Bongo)' || adjType === 'BO / Melted Deduction' || adjType === 'POS Walk-in Sale';
     const netChange = isOutbound ? -Math.abs(qtyNumber) : Math.abs(qtyNumber);
-
     const newOnHand = Math.max(0, prod.onHand + netChange);
 
-    // Update Product Balance
     setStockBalances(stockBalances.map(p => p.id === adjProduct ? { ...p, onHand: newOnHand } : p));
 
-    // Append FIFO Ledger Entry
     const newLedgerEntry = {
       id: `LEDG-2026-${900 + ledgerLogs.length + 1}`,
       timestamp: new Date().toISOString(),
       productId: prod.id,
       productName: prod.name,
+      category: prod.category,
       type: adjType,
       changeQty: netChange,
       runningOnHand: newOnHand,
       referenceNo: 'MANUAL-ADJ',
-      staff: 'Admin Owner',
-      notes: adjNotes || 'Manual inventory adjustment.'
+      staff: 'Warehouse Admin',
+      notes: adjNotes || 'Manual stock adjustment logged.'
     };
 
     setLedgerLogs([newLedgerEntry, ...ledgerLogs]);
@@ -205,7 +179,7 @@ export default function Inventory() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Inventory Ledger & Stock Movements</h1>
-          <p className="text-sm text-slate-500">Real-time stock balances, FIFO transaction logs & warehouse valuations</p>
+          <p className="text-sm text-slate-500">Real-time balances across categories, FIFO transaction ledger & warehouse valuation</p>
         </div>
         <button 
           onClick={() => setIsAdjModalOpen(true)}
@@ -222,8 +196,9 @@ export default function Inventory() {
             <Package className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Warehouse Stock Value</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Warehouse Valuation</p>
             <h3 className="text-lg font-bold text-emerald-800">{formatPHP(totalValuation)}</h3>
+            <span className="text-[11px] text-slate-400">At Dealer Cost Price</span>
           </div>
         </div>
 
@@ -232,8 +207,9 @@ export default function Inventory() {
             <Boxes className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Units On Hand</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Available On Hand</p>
             <h3 className="text-lg font-bold text-slate-900">{totalOnHandUnits} Units</h3>
+            <span className="text-[11px] text-blue-600 font-medium">{totalReservedUnits} Reserved for Bongo</span>
           </div>
         </div>
 
@@ -242,8 +218,9 @@ export default function Inventory() {
             <AlertTriangle className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Stock Alert Items</p>
-            <h3 className="text-lg font-bold text-brand-red">{lowStockCount} SKUs Low/Critical</h3>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Low Stock SKUs</p>
+            <h3 className="text-lg font-bold text-brand-red">{lowStockCount} Items</h3>
+            <span className="text-[11px] text-brand-red font-medium">Reorder from Main Bodega</span>
           </div>
         </div>
 
@@ -253,7 +230,8 @@ export default function Inventory() {
           </div>
           <div>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Ledger Movement Rule</p>
-            <h3 className="text-lg font-bold text-slate-900">Strict FIFO</h3>
+            <h3 className="text-lg font-bold text-slate-900">FIFO Compliant</h3>
+            <span className="text-[11px] text-purple-700 font-medium">Auto-tracks van receipts</span>
           </div>
         </div>
       </div>
@@ -268,7 +246,7 @@ export default function Inventory() {
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          <Package className="w-4 h-4" /> Stock Balances & Valuation
+          <Package className="w-4 h-4" /> Stock Balances & Valuation ({filteredProducts.length})
         </button>
         <button 
           onClick={() => setActiveTab('fifo')}
@@ -278,7 +256,7 @@ export default function Inventory() {
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          <History className="w-4 h-4" /> FIFO Movement Ledger ({ledgerLogs.length})
+          <History className="w-4 h-4" /> FIFO Movement Ledger ({filteredLedger.length})
         </button>
       </div>
 
@@ -290,33 +268,35 @@ export default function Inventory() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input 
               type="text" 
-              placeholder="Search by product name, barcode, ID, or transaction ref..." 
+              placeholder="Search product name, barcode, ID, or reference..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="input-field pl-9"
+              className="input-field pl-9 text-xs"
             />
           </div>
           {activeTab === 'balances' ? (
             <select 
               value={categoryFilter} 
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="input-field cursor-pointer sm:w-48"
+              className="input-field cursor-pointer sm:w-60 text-xs font-semibold"
             >
               <option value="All">All Categories</option>
-              <option value="Single Serve">Single Serve</option>
-              <option value="Premium Single">Premium Single</option>
-              <option value="Tubs & Pints">Tubs & Pints</option>
+              {SELECTA_CATEGORIES.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
             </select>
           ) : (
             <select 
               value={typeFilter} 
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="input-field cursor-pointer sm:w-52"
+              className="input-field cursor-pointer sm:w-64 text-xs font-semibold"
             >
               <option value="All">All Movement Types</option>
-              <option value="Stock Receiving">Stock Receiving (+)</option>
-              <option value="Dispatch Allocation">Dispatch (-)</option>
-              <option value="BO / Melted Return">BO Return (-)</option>
+              <option value="Stock Receiving (Freezer Van)">Stock Receiving (Freezer Van)</option>
+              <option value="Dispatch Allocation (Bongo)">Dispatch Allocation (Bongo)</option>
+              <option value="Backload Return (Store Closed)">Backload Return</option>
+              <option value="BO / Melted Deduction">BO / Melted Deduction</option>
+              <option value="POS Walk-in Sale">POS Walk-in Sale</option>
             </select>
           )}
         </div>
@@ -327,55 +307,63 @@ export default function Inventory() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Product SKU / Barcode</th>
+                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Product SKU & Barcode</th>
                   <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Category</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Dealer Buy Price</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Physical On-Hand</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Reserved for Trips</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Net Available</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Total Stock Value</th>
+                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Dealer Cost</th>
+                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">On Hand</th>
+                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Bongo Reserved</th>
+                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Available</th>
+                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Stock Valuation</th>
+                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
                 {filteredProducts.length > 0 ? (
                   filteredProducts.map((p) => {
-                    const available = Math.max(0, p.onHand - p.reserved);
-                    const totalVal = p.onHand * p.unitPrice;
+                    const availableQty = Math.max(0, p.onHand - p.reserved);
                     const isLow = p.onHand <= p.minStock;
 
                     return (
                       <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                         <td className="py-3 px-4">
-                          <div className="text-sm font-bold text-slate-800">{p.name}</div>
-                          <div className="text-xs text-slate-400 font-mono">{p.barcode} • {p.id}</div>
+                          <div className="text-sm font-bold text-slate-900">{p.name}</div>
+                          <div className="text-xs text-slate-400 font-mono">{p.id} • {p.barcode}</div>
                         </td>
-                        <td className="py-3 px-4 text-sm text-slate-600 font-medium">{p.category}</td>
-                        <td className="py-3 px-4 text-sm font-semibold text-slate-800">{formatPHP(p.unitPrice)}</td>
                         <td className="py-3 px-4">
-                          <div className="text-sm font-bold text-slate-900">{p.onHand} <span className="text-xs font-normal text-slate-500">{p.unit}</span></div>
-                          {isLow && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-brand-red">
-                              <AlertTriangle className="w-3 h-3" /> Min Stock Alert ({p.minStock})
-                            </span>
-                          )}
+                          <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold text-[11px]">
+                            {p.category}
+                          </span>
                         </td>
-                        <td className="py-3 px-4 text-sm font-bold text-amber-700">
-                          {p.reserved} {p.unit}
+                        <td className="py-3 px-4 text-sm font-bold text-slate-800">
+                          {formatPHP(p.unitPrice)}
+                        </td>
+                        <td className="py-3 px-4 text-sm font-bold text-slate-900">
+                          {p.onHand} <span className="text-[11px] font-normal text-slate-400">{p.unit}</span>
+                        </td>
+                        <td className="py-3 px-4 text-sm font-semibold text-blue-600">
+                          {p.reserved}
                         </td>
                         <td className="py-3 px-4 text-sm font-bold text-emerald-700">
-                          {available} {p.unit}
+                          {availableQty}
                         </td>
-                        <td className="py-3 px-4 text-sm font-extrabold text-slate-900">
-                          {formatPHP(totalVal)}
+                        <td className="py-3 px-4 text-sm font-bold text-slate-900">
+                          {formatPHP(p.onHand * p.unitPrice)}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
+                            isLow ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          }`}>
+                            {isLow ? 'Low Stock' : 'Optimal'}
+                          </span>
                         </td>
                       </tr>
                     );
                   })
                 ) : (
                   <tr>
-                    <td colSpan="7" className="py-8 text-center text-slate-500">
+                    <td colSpan="8" className="py-8 text-center text-slate-500">
                       <Package className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-                      No products found.
+                      No products found matching filter.
                     </td>
                   </tr>
                 )}
@@ -384,58 +372,69 @@ export default function Inventory() {
           </div>
         )}
 
-        {/* Tab 2: FIFO Movements Ledger Table */}
+        {/* Tab 2: FIFO Movement Ledger */}
         {activeTab === 'fifo' && (
           <div className="overflow-x-auto rounded-lg border border-slate-200">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Log Ref / Timestamp</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Product</th>
+                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Date & Time</th>
+                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Product & Category</th>
                   <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Movement Type</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Quantity Delta</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Running On-Hand</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Reference & Staff</th>
+                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Quantity Change</th>
+                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Running Balance</th>
+                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Reference No.</th>
+                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Staff / Notes</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
                 {filteredLedger.length > 0 ? (
-                  filteredLedger.map((l) => (
-                    <tr key={l.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="text-xs font-bold font-mono text-slate-800">{l.id}</div>
-                        <div className="text-[11px] text-slate-400">{formatDate(l.timestamp)}</div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="text-sm font-bold text-slate-800">{l.productName}</div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                          l.changeQty > 0 
-                            ? 'bg-emerald-100 text-emerald-800 border-emerald-200' 
-                            : 'bg-red-100 text-red-800 border-red-200'
-                        }`}>
-                          {l.changeQty > 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                          {l.type}
-                        </span>
-                      </td>
-                      <td className={`py-3 px-4 text-sm font-extrabold ${l.changeQty > 0 ? 'text-emerald-700' : 'text-brand-red'}`}>
-                        {l.changeQty > 0 ? `+${l.changeQty}` : l.changeQty}
-                      </td>
-                      <td className="py-3 px-4 text-sm font-bold text-slate-900">
-                        {l.runningOnHand}
-                      </td>
-                      <td className="py-3 px-4 text-xs text-slate-600">
-                        <div className="font-bold text-slate-800 font-mono">{l.referenceNo}</div>
-                        <div className="text-[11px] text-slate-500">By {l.staff} • {l.notes}</div>
-                      </td>
-                    </tr>
-                  ))
+                  filteredLedger.map((log) => {
+                    const isInbound = log.changeQty > 0;
+
+                    return (
+                      <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-3 px-4 text-xs text-slate-600">
+                          <div className="font-bold text-slate-800">{formatDate(log.timestamp)}</div>
+                          <div className="text-[10px] text-slate-400 font-mono">{log.id}</div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="text-sm font-bold text-slate-900">{log.productName}</div>
+                          <div className="text-[11px] text-brand-red font-medium">{log.category}</div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                            isInbound ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {isInbound ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+                            {log.type}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-sm font-bold">
+                          <span className={isInbound ? 'text-emerald-700' : 'text-red-600'}>
+                            {isInbound ? `+${log.changeQty}` : log.changeQty} units
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-sm font-bold text-slate-900">
+                          {log.runningOnHand} units
+                        </td>
+                        <td className="py-3 px-4 text-xs font-mono font-bold text-slate-700">
+                          {log.referenceNo}
+                        </td>
+                        <td className="py-3 px-4 text-xs text-slate-600">
+                          <div className="font-semibold text-slate-800">{log.staff}</div>
+                          <div className="text-[11px] text-slate-500 truncate max-w-xs" title={log.notes}>
+                            {log.notes}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
-                    <td colSpan="6" className="py-8 text-center text-slate-500">
+                    <td colSpan="7" className="py-8 text-center text-slate-500">
                       <History className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-                      No inventory movements found.
+                      No ledger transactions found matching filters.
                     </td>
                   </tr>
                 )}
@@ -451,7 +450,7 @@ export default function Inventory() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
               <div className="flex items-center gap-2">
-                <RotateCcw className="w-5 h-5 text-brand-red" />
+                <RefreshCw className="w-5 h-5 text-brand-red" />
                 <h2 className="text-lg font-bold text-slate-800">Manual Inventory Adjustment</h2>
               </div>
               <button onClick={() => setIsAdjModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
@@ -459,59 +458,60 @@ export default function Inventory() {
               </button>
             </div>
 
-            <div className="p-5 space-y-4">
+            <div className="p-5 space-y-4 text-xs">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Select SKU Product <span className="text-brand-red">*</span></label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Select Product SKU</label>
                 <select 
-                  value={adjProduct}
-                  onChange={(e) => setAdjProduct(e.target.value)}
-                  className="input-field cursor-pointer"
+                  value={adjProduct} 
+                  onChange={(e) => setAdjProduct(e.target.value)} 
+                  className="input-field cursor-pointer text-xs font-medium"
                 >
                   {stockBalances.map(p => (
-                    <option key={p.id} value={p.id}>{p.name} (On Hand: {p.onHand})</option>
+                    <option key={p.id} value={p.id}>{p.name} ({p.category}) - On Hand: {p.onHand}</option>
                   ))}
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Movement Type</label>
-                  <select 
-                    value={adjType}
-                    onChange={(e) => setAdjType(e.target.value)}
-                    className="input-field cursor-pointer text-xs"
-                  >
-                    <option value="Stock Receiving">Stock Receiving (+)</option>
-                    <option value="Dispatch Allocation">Dispatch (-)</option>
-                    <option value="BO / Melted Return">BO / Melted Return (-)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Quantity Delta <span className="text-brand-red">*</span></label>
-                  <input 
-                    type="number" 
-                    min="1"
-                    value={adjQty}
-                    onChange={(e) => setAdjQty(e.target.value)}
-                    className="input-field font-bold text-center" 
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Movement Type</label>
+                <select 
+                  value={adjType} 
+                  onChange={(e) => setAdjType(e.target.value)} 
+                  className="input-field cursor-pointer text-xs"
+                >
+                  <option value="Stock Receiving (Freezer Van)">Stock Receiving (Freezer Van) - Inbound (+)</option>
+                  <option value="Backload Return (Store Closed)">Backload Return (Store Closed) - Inbound (+)</option>
+                  <option value="Dispatch Allocation (Bongo)">Dispatch Allocation (Bongo) - Outbound (-)</option>
+                  <option value="BO / Melted Deduction">BO / Melted Deduction - Outbound (-)</option>
+                  <option value="POS Walk-in Sale">POS Walk-in Sale - Outbound (-)</option>
+                </select>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Audit Reason / Remarks</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Adjustment Quantity</label>
+                <input 
+                  type="number" 
+                  min="1" 
+                  value={adjQty} 
+                  onChange={(e) => setAdjQty(e.target.value)} 
+                  className="input-field text-xs font-bold" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Reason / Ledger Notes</label>
                 <textarea 
-                  value={adjNotes}
-                  onChange={(e) => setAdjNotes(e.target.value)}
-                  placeholder="Explain why this inventory count was updated..."
-                  className="input-field resize-none h-20"
+                  value={adjNotes} 
+                  onChange={(e) => setAdjNotes(e.target.value)} 
+                  placeholder="Explain why this adjustment is needed..."
+                  className="input-field resize-none h-16 text-xs" 
                 ></textarea>
               </div>
             </div>
 
             <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
               <button onClick={() => setIsAdjModalOpen(false)} className="btn-secondary text-xs">Cancel</button>
-              <button onClick={handleSaveAdjustment} className="btn-primary text-xs">Confirm & Commit Ledger Entry</button>
+              <button onClick={handleSaveAdjustment} className="btn-primary text-xs">Post Ledger Adjustment</button>
             </div>
           </div>
         </div>

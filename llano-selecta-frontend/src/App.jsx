@@ -16,6 +16,7 @@ import Inventory from './pages/Inventory';
 import Dispatch from './pages/Dispatch';
 import Discrepancies from './pages/Discrepancies';
 import POS from './pages/POS';
+import Payments from './pages/Payments';
 import Reconciliation from './pages/Reconciliation';
 import Quota from './pages/Quota';
 import AuditLogs from './pages/AuditLogs';
@@ -56,11 +57,10 @@ function App() {
           
           {/* Finance */}
           <Route path="/finance/pos" element={<POS />} />
-          <Route path="/finance/payments" element={<POS />} />
+          <Route path="/finance/payments" element={<Payments />} />
           <Route path="/finance/reconciliation" element={<Reconciliation />} />
           
           {/* Monitoring */}
-          <Route path="/monitoring/timemark" element={<Freezers />} />
           <Route path="/monitoring/quota" element={<Quota />} />
           
           {/* Admin & Security */}

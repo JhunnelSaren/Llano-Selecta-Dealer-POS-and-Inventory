@@ -68,7 +68,6 @@ const navigationGroups = [
   {
     title: 'MONITORING',
     items: [
-      { name: 'Freezer Timemark', path: '/monitoring/timemark', icon: Camera },
       { name: 'SELECTA Quota', path: '/monitoring/quota', icon: Target }
     ]
   },

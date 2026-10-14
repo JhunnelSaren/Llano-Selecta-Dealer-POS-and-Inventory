@@ -18,23 +18,37 @@ import {
   Edit,
   Trash2,
   Building2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Barcode,
+  Upload,
+  AlertTriangle,
+  Clock
 } from 'lucide-react';
 import { INITIAL_CUSTOMERS } from '../utils/productCatalog';
 import { formatDate } from '../utils/helpers';
 
 export default function Customers() {
-  const [customers, setCustomers] = useState(INITIAL_CUSTOMERS);
+  const [customers, setCustomers] = useState(
+    INITIAL_CUSTOMERS.map(c => ({
+      ...c,
+      barcodeNo: c.barcodeNo || `4800019${c.id.replace('CUST-', '')}01`,
+      freezerSerial: c.freezerSerial || `SEL-FRZ-88${c.id.replace('CUST-', '')}`,
+      status: c.status || 'Active'
+    }))
+  );
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMainArea, setSelectedMainArea] = useState('ALL');
   const [selectedSubArea, setSelectedSubArea] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ALL');
   
   // Modals
   const [viewCustomer, setViewCustomer] = useState(null);
   const [viewPaperPhoto, setViewPaperPhoto] = useState(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState(null);
 
-  // Form State for Adding New Store
+  // Form State for Adding / Editing Store
   const [formData, setFormData] = useState({
     store_name: '',
     owner: '',
@@ -43,8 +57,9 @@ export default function Customers() {
     subArea: 'Batangan',
     purok: '',
     contact: '',
-    freezerModel: 'Chest Freezer 300L',
     freezerSerial: '',
+    barcodeNo: '',
+    status: 'Active',
     deploymentPaperRef: '',
     deploymentPaperPhoto: ''
   });
@@ -53,50 +68,70 @@ export default function Customers() {
   const sanFernandoSubAreas = ['San Fernando Poblacion', 'Halapitan'];
   const cabanglasanSubAreas = ['Cabanglasan Centro', 'Mandaing'];
 
-  // Sync with Backend API if available
-  React.useEffect(() => {
-    fetch('http://localhost:5000/api/customers')
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data) && data.length > 0) {
-          // If server returns DB rows, augment with defaults if necessary
-          setCustomers(data.map((c, i) => ({
-            ...INITIAL_CUSTOMERS[i % INITIAL_CUSTOMERS.length],
-            ...c
-          })));
-        }
-      })
-      .catch(() => {
-        // Fallback already populated from INITIAL_CUSTOMERS
-      });
-  }, []);
+  // Handle Device Photo Upload
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({ ...prev, deploymentPaperPhoto: reader.result }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
-  // Filter Logic
-  const filteredCustomers = customers.filter(c => {
-    // Search filter: Store name, owner, purok, or contact
-    const matchesSearch = 
-      c.store_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.owner.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.purok.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (c.subArea && c.subArea.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (c.contact && c.contact.includes(searchTerm));
+  // Open Edit Modal
+  const openEditModal = (cust) => {
+    setEditingCustomer(cust);
+    setFormData({
+      store_name: cust.store_name,
+      owner: cust.owner,
+      dateJoined: cust.dateJoined || new Date().toISOString().split('T')[0],
+      area: cust.area || 'Valencia',
+      subArea: cust.subArea || 'Batangan',
+      purok: cust.purok || '',
+      contact: cust.contact || '',
+      freezerSerial: cust.freezerSerial || '',
+      barcodeNo: cust.barcodeNo || '',
+      status: cust.status || 'Active',
+      deploymentPaperRef: cust.deploymentPaperRef || '',
+      deploymentPaperPhoto: cust.deploymentPaperPhoto || ''
+    });
+  };
 
-    // Area filter
-    const matchesMainArea = 
-      selectedMainArea === 'ALL' || c.area.toLowerCase().includes(selectedMainArea.toLowerCase());
+  // Save Edit Customer
+  const handleSaveEditCustomer = (e) => {
+    e.preventDefault();
+    if (!formData.store_name || !formData.owner) {
+      alert('Please fill in Store Name and Owner Name');
+      return;
+    }
 
-    // SubArea filter
-    const matchesSubArea = 
-      selectedSubArea === 'ALL' || c.subArea === selectedSubArea;
+    setCustomers(customers.map(c => {
+      if (c.id === editingCustomer.id) {
+        return {
+          ...c,
+          store_name: formData.store_name,
+          owner: formData.owner,
+          dateJoined: formData.dateJoined,
+          area: formData.area,
+          subArea: formData.subArea,
+          purok: formData.purok,
+          contact: formData.contact,
+          freezerSerial: formData.freezerSerial,
+          barcodeNo: formData.barcodeNo,
+          status: formData.status,
+          deploymentPaperRef: formData.deploymentPaperRef,
+          deploymentPaperPhoto: formData.deploymentPaperPhoto
+        };
+      }
+      return c;
+    }));
 
-    return matchesSearch && matchesMainArea && matchesSubArea;
-  });
+    setEditingCustomer(null);
+  };
 
-  // Calculate dynamic counts
-  const valenciaCount = customers.filter(c => c.area.toLowerCase().includes('valencia')).length;
-  const sanFernandoCount = customers.filter(c => c.area.toLowerCase().includes('san fernando') || c.area.toLowerCase().includes('sanfernando')).length;
-  const cabanglasanCount = customers.filter(c => c.area.toLowerCase().includes('cabanglasan')).length;
-
+  // Add New Customer
   const handleAddCustomer = (e) => {
     e.preventDefault();
     if (!formData.store_name || !formData.owner) {
@@ -114,11 +149,11 @@ export default function Customers() {
       purok: formData.purok || 'Purok 1',
       route: `${formData.area} Route`,
       contact: formData.contact || '09XX-XXX-XXXX',
-      freezerModel: formData.freezerModel,
-      freezerSerial: formData.freezerSerial || `SEL-FRZ-${Math.floor(1000 + Math.random() * 9000)}`,
-      status: 'Active',
-      deploymentPaperPhoto: formData.deploymentPaperPhoto || 'https://images.unsplash.com/photo-1568667256549-094345857637?auto=format&fit=crop&q=80&w=700',
-      deploymentPaperRef: formData.deploymentPaperRef || `DP-${formData.area.substring(0, 3).toUpperCase()}-2026-${Math.floor(100 + Math.random() * 900)}`
+      freezerSerial: formData.freezerSerial || '',
+      barcodeNo: formData.barcodeNo || '',
+      status: formData.status || 'Active',
+      deploymentPaperPhoto: formData.deploymentPaperPhoto || '',
+      deploymentPaperRef: formData.deploymentPaperRef || (formData.deploymentPaperPhoto ? `DP-${formData.area.substring(0, 3).toUpperCase()}-2026-${Math.floor(100 + Math.random() * 900)}` : 'Pending Paper')
     };
 
     setCustomers([newCustomer, ...customers]);
@@ -131,12 +166,38 @@ export default function Customers() {
       subArea: 'Batangan',
       purok: '',
       contact: '',
-      freezerModel: 'Chest Freezer 300L',
       freezerSerial: '',
+      barcodeNo: '',
+      status: 'Active',
       deploymentPaperRef: '',
       deploymentPaperPhoto: ''
     });
   };
+
+  // Filter Logic
+  const filteredCustomers = customers.filter(c => {
+    const matchesSearch = 
+      c.store_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.owner.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.purok.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (c.subArea && c.subArea.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (c.contact && c.contact.includes(searchTerm));
+
+    const matchesMainArea = 
+      selectedMainArea === 'ALL' || c.area.toLowerCase().includes(selectedMainArea.toLowerCase());
+
+    const matchesSubArea = 
+      selectedSubArea === 'ALL' || c.subArea === selectedSubArea;
+
+    const matchesStatus = 
+      statusFilter === 'ALL' || c.status === statusFilter;
+
+    return matchesSearch && matchesMainArea && matchesSubArea && matchesStatus;
+  });
+
+  const valenciaCount = customers.filter(c => c.area.toLowerCase().includes('valencia')).length;
+  const sanFernandoCount = customers.filter(c => c.area.toLowerCase().includes('san fernando') || c.area.toLowerCase().includes('sanfernando')).length;
+  const cabanglasanCount = customers.filter(c => c.area.toLowerCase().includes('cabanglasan')).length;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -145,11 +206,27 @@ export default function Customers() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Customers & Stores Master</h1>
           <p className="text-sm text-slate-500">
-            Registered Selecta dealer store accounts, verified freezer deployment agreements, and territorial purok locations
+            Registered Selecta dealer stores, editable custody profiles, signed deployment agreements, and Barcode/Serial tracking
           </p>
         </div>
         <button 
-          onClick={() => setIsAddModalOpen(true)}
+          onClick={() => {
+            setFormData({
+              store_name: '',
+              owner: '',
+              dateJoined: new Date().toISOString().split('T')[0],
+              area: 'Valencia',
+              subArea: 'Batangan',
+              purok: '',
+              contact: '',
+              freezerSerial: '',
+              barcodeNo: '',
+              status: 'Active',
+              deploymentPaperRef: '',
+              deploymentPaperPhoto: ''
+            });
+            setIsAddModalOpen(true);
+          }}
           className="btn-primary flex items-center justify-center gap-2"
         >
           <Plus className="w-4 h-4" /> Register New Store
@@ -171,7 +248,7 @@ export default function Customers() {
             </div>
             <Store className="w-8 h-8 text-slate-400" />
           </div>
-          <div className="text-[11px] text-slate-500 mt-2">Total registered retail partners</div>
+          <div className="text-[11px] text-slate-500 mt-2">Total registered retail stores</div>
         </div>
 
         <div 
@@ -203,7 +280,7 @@ export default function Customers() {
             </div>
             <MapPin className="w-8 h-8 text-emerald-500" />
           </div>
-          <div className="text-[11px] text-slate-500 mt-2">Halapitan, Poblacion & Market</div>
+          <div className="text-[11px] text-slate-500 mt-2">Halapitan, Poblacion & Public Market</div>
         </div>
 
         <div 
@@ -238,7 +315,7 @@ export default function Customers() {
             />
           </div>
 
-          <div className="flex items-center gap-2 sm:w-64">
+          <div className="flex items-center gap-2 sm:w-60">
             <Filter className="w-4 h-4 text-slate-400 hidden sm:block" />
             <select 
               value={selectedMainArea} 
@@ -246,12 +323,26 @@ export default function Customers() {
                 setSelectedMainArea(e.target.value);
                 setSelectedSubArea('ALL');
               }}
-              className="input-field cursor-pointer"
+              className="input-field cursor-pointer text-xs"
             >
               <option value="ALL">All Main Territories</option>
               <option value="Valencia">Valencia Area ({valenciaCount})</option>
               <option value="San Fernando">San Fernando Area ({sanFernandoCount})</option>
               <option value="Cabanglasan">Cabanglasan Area ({cabanglasanCount})</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2 sm:w-48">
+            <select 
+              value={statusFilter} 
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="input-field cursor-pointer text-xs"
+            >
+              <option value="ALL">All Store Statuses</option>
+              <option value="Active">Active</option>
+              <option value="Pending Papers">Pending Papers</option>
+              <option value="Pending Freezer">Pending Freezer</option>
+              <option value="Inactive">Inactive</option>
             </select>
           </div>
         </div>
@@ -273,10 +364,9 @@ export default function Customers() {
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              All Barangays / Sub-Areas ({filteredCustomers.length})
+              All Barangays ({filteredCustomers.length})
             </button>
 
-            {/* If Valencia or ALL is selected, show Valencia Barangays */}
             {(selectedMainArea === 'ALL' || selectedMainArea === 'Valencia') && (
               <>
                 <span className="self-center text-xs font-semibold text-slate-300 px-1">| Valencia:</span>
@@ -300,7 +390,6 @@ export default function Customers() {
               </>
             )}
 
-            {/* San Fernando Sub-areas */}
             {(selectedMainArea === 'ALL' || selectedMainArea === 'San Fernando') && (
               <>
                 <span className="self-center text-xs font-semibold text-slate-300 px-1">| San Fernando:</span>
@@ -324,7 +413,6 @@ export default function Customers() {
               </>
             )}
 
-            {/* Cabanglasan Sub-areas */}
             {(selectedMainArea === 'ALL' || selectedMainArea === 'Cabanglasan') && (
               <>
                 <span className="self-center text-xs font-semibold text-slate-300 px-1">| Cabanglasan:</span>
@@ -358,8 +446,9 @@ export default function Customers() {
                 <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Store & Owner</th>
                 <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Territory & Purok</th>
                 <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Date Joined</th>
-                <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Assigned Freezer</th>
-                <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider text-center">Deployment Paper</th>
+                <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Freezer Serial & Barcode</th>
+                <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
+                <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider text-center">Signed Paper</th>
                 <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">Actions</th>
               </tr>
             </thead>
@@ -380,7 +469,7 @@ export default function Customers() {
                             <span>Owner: <strong>{cust.owner}</strong></span>
                           </div>
                           <div className="text-[11px] text-slate-400 flex items-center gap-1 font-mono">
-                            <Phone className="w-2.5 h-2.5" /> {cust.contact}
+                            <Phone className="w-2.5 h-2.5" /> {cust.contact || 'No phone'}
                           </div>
                         </div>
                       </div>
@@ -413,20 +502,42 @@ export default function Customers() {
                         <Calendar className="w-3.5 h-3.5 text-slate-400" />
                         <span>{formatDate(cust.dateJoined)}</span>
                       </div>
-                      <div className="text-[11px] text-slate-400">Customer #{cust.id}</div>
+                      <div className="text-[11px] text-slate-400">ID #{cust.id}</div>
                     </td>
 
-                    {/* Assigned Freezer */}
+                    {/* Freezer Serial # beside Barcode No. (Requirement 3) */}
                     <td className="py-3 px-4">
-                      <div className="space-y-0.5">
-                        <div className="text-xs font-semibold text-slate-800 flex items-center gap-1">
-                          <Snowflake className="w-3 h-3 text-blue-500" />
-                          <span>{cust.freezerModel}</span>
+                      {cust.freezerSerial || cust.barcodeNo ? (
+                        <div className="space-y-0.5">
+                          <div className="text-xs font-semibold text-slate-800 flex items-center gap-1">
+                            <Snowflake className="w-3 h-3 text-blue-500" />
+                            <span>SN: {cust.freezerSerial || 'Pending'}</span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 font-mono flex items-center gap-1">
+                            <Barcode className="w-3 h-3 text-slate-400" />
+                            <span>BC: {cust.barcodeNo || 'Pending'}</span>
+                          </div>
                         </div>
-                        <div className="text-[11px] text-slate-500 font-mono">
-                          SN: {cust.freezerSerial}
-                        </div>
-                      </div>
+                      ) : (
+                        <span className="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                          Freezer Pending
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Status */}
+                    <td className="py-3 px-4">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                        cust.status === 'Active' 
+                          ? 'bg-emerald-100 text-emerald-800' 
+                          : cust.status === 'Pending Papers'
+                          ? 'bg-amber-100 text-amber-800'
+                          : cust.status === 'Pending Freezer'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {cust.status}
+                      </span>
                     </td>
 
                     {/* Signed Deployment Paper Photo */}
@@ -435,43 +546,47 @@ export default function Customers() {
                         <div className="inline-flex flex-col items-center gap-1">
                           <div 
                             onClick={() => setViewPaperPhoto(cust)}
-                            className="relative group cursor-pointer w-14 h-14 rounded-lg overflow-hidden border border-slate-200 hover:border-brand-red shadow-xs transition-all"
+                            className="relative group cursor-pointer w-12 h-12 rounded-lg overflow-hidden border border-slate-200 hover:border-brand-red shadow-2xs transition-all"
                             title="Click to view signed deployment agreement paper"
                           >
                             <img 
                               src={cust.deploymentPaperPhoto} 
                               alt="Signed Deployment Paper" 
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
                             />
                             <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
-                              <Eye className="w-4 h-4" />
+                              <Eye className="w-3.5 h-3.5" />
                             </div>
                           </div>
                           <span className="text-[10px] text-emerald-700 font-semibold flex items-center gap-0.5">
-                            <CheckCircle2 className="w-2.5 h-2.5" /> Signed Paper
+                            <CheckCircle2 className="w-2.5 h-2.5" /> Signed
                           </span>
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-400 italic">No paper uploaded</span>
+                        <div className="inline-flex flex-col items-center">
+                          <span className="text-[11px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 flex items-center gap-1">
+                            <Clock className="w-2.5 h-2.5" /> Paper Pending
+                          </span>
+                        </div>
                       )}
                     </td>
 
-                    {/* Actions */}
+                    {/* Actions: View & Edit (Requirement 3) */}
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button 
-                          onClick={() => setViewCustomer(cust)}
-                          className="p-1.5 text-slate-500 hover:text-brand-red hover:bg-red-50 rounded-lg transition-colors"
-                          title="View Full Profile & Deployment Paper"
+                          onClick={() => openEditModal(cust)}
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Edit Customer Store & Custody Info"
                         >
-                          <Eye className="w-4 h-4" />
+                          <Edit className="w-4 h-4" />
                         </button>
                         <button 
-                          onClick={() => setViewPaperPhoto(cust)}
-                          className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Inspect Deployment Paper Photo"
+                          onClick={() => setViewCustomer(cust)}
+                          className="p-1.5 text-slate-500 hover:text-brand-red hover:bg-red-50 rounded-lg transition-colors"
+                          title="View Full Profile"
                         >
-                          <FileText className="w-4 h-4" />
+                          <Eye className="w-4 h-4" />
                         </button>
                       </div>
                     </td>
@@ -479,10 +594,9 @@ export default function Customers() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="6" className="py-12 text-center text-slate-400">
+                  <td colSpan="7" className="py-12 text-center text-slate-400">
                     <Store className="w-10 h-10 mx-auto text-slate-300 mb-2" />
                     <p className="text-sm font-semibold text-slate-600">No stores found matching your filters</p>
-                    <p className="text-xs text-slate-400 mt-1">Try selecting a different territory or clearing the search box</p>
                   </td>
                 </tr>
               )}
@@ -500,7 +614,7 @@ export default function Customers() {
                 <FileText className="w-5 h-5 text-brand-red" />
                 <div>
                   <h3 className="text-base font-bold text-slate-800">Freezer Deployment Agreement Paper</h3>
-                  <p className="text-xs text-slate-500">{viewPaperPhoto.store_name} • Ref: {viewPaperPhoto.deploymentPaperRef}</p>
+                  <p className="text-xs text-slate-500">{viewPaperPhoto.store_name} • Ref: {viewPaperPhoto.deploymentPaperRef || 'N/A'}</p>
                 </div>
               </div>
               <button 
@@ -522,8 +636,8 @@ export default function Customers() {
                   <strong className="text-slate-900 text-sm">{viewPaperPhoto.owner}</strong>
                 </div>
                 <div>
-                  <span className="text-slate-500 block">Purok & Territory:</span>
-                  <span className="text-slate-800 font-medium">{viewPaperPhoto.purok}, {viewPaperPhoto.subArea}, {viewPaperPhoto.area}</span>
+                  <span className="text-slate-500 block">Freezer Serial # & Barcode:</span>
+                  <span className="text-slate-800 font-medium">SN: {viewPaperPhoto.freezerSerial || 'None'} • BC: {viewPaperPhoto.barcodeNo || 'None'}</span>
                 </div>
                 <div>
                   <span className="text-slate-500 block">Date Customer Joined:</span>
@@ -542,13 +656,13 @@ export default function Customers() {
 
               <div className="flex justify-between items-center text-xs text-slate-500 pt-2 border-t border-slate-100">
                 <div className="flex items-center gap-1 text-emerald-700 font-semibold">
-                  <CheckCircle2 className="w-4 h-4" /> Legally Acknowledged & Signed Agreement
+                  <CheckCircle2 className="w-4 h-4" /> Legally Signed & Verified Agreement
                 </div>
                 <button 
                   onClick={() => window.open(viewPaperPhoto.deploymentPaperPhoto, '_blank')}
                   className="btn-secondary text-xs flex items-center gap-1.5"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" /> Open Full Resolution Photo
+                  <ExternalLink className="w-3.5 h-3.5" /> Open Full Image
                 </button>
               </div>
             </div>
@@ -565,10 +679,7 @@ export default function Customers() {
                 <Store className="w-5 h-5 text-brand-red" />
                 <h3 className="text-base font-bold text-slate-800">Store Profile Details</h3>
               </div>
-              <button 
-                onClick={() => setViewCustomer(null)} 
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
-              >
+              <button onClick={() => setViewCustomer(null)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -580,7 +691,7 @@ export default function Customers() {
                 </div>
                 <div>
                   <h2 className="text-base font-bold text-slate-900">{viewCustomer.store_name}</h2>
-                  <p className="text-slate-500 font-medium">Owner: {viewCustomer.owner} • Contact: {viewCustomer.contact}</p>
+                  <p className="text-slate-500 font-medium">Owner: {viewCustomer.owner} • Contact: {viewCustomer.contact || 'N/A'}</p>
                 </div>
               </div>
 
@@ -602,7 +713,7 @@ export default function Customers() {
                   <span className="font-bold text-slate-800">{formatDate(viewCustomer.dateJoined)}</span>
                 </div>
                 <div>
-                  <span className="text-slate-400 block text-[11px]">Customer Status:</span>
+                  <span className="text-slate-400 block text-[11px]">Store Status:</span>
                   <span className="font-bold text-emerald-600">{viewCustomer.status}</span>
                 </div>
               </div>
@@ -611,52 +722,55 @@ export default function Customers() {
                 <div className="font-bold text-slate-800 flex items-center gap-1.5">
                   <Snowflake className="w-4 h-4 text-blue-500" /> Assigned Selecta Freezer
                 </div>
-                <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100 text-slate-700">
-                  <div className="font-bold">{viewCustomer.freezerModel}</div>
-                  <div className="text-[11px] text-slate-500 font-mono mt-0.5">Serial: {viewCustomer.freezerSerial}</div>
+                <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100 text-slate-700 grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Freezer Serial #:</span>
+                    <span className="font-bold text-slate-900">{viewCustomer.freezerSerial || 'Not Assigned Yet'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Barcode No.:</span>
+                    <span className="font-bold text-slate-900">{viewCustomer.barcodeNo || 'Not Assigned Yet'}</span>
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-2 border-t border-slate-100 pt-3">
-                <div className="font-bold text-slate-800 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <FileText className="w-4 h-4 text-brand-red" /> Signed Deployment Agreement Paper
-                  </span>
-                  <span className="text-[11px] text-slate-400 font-mono">{viewCustomer.deploymentPaperRef}</span>
-                </div>
-                <div 
-                  onClick={() => { setViewPaperPhoto(viewCustomer); setViewCustomer(null); }}
-                  className="cursor-pointer group relative rounded-lg overflow-hidden border border-slate-200 h-28 bg-slate-100 flex items-center justify-center"
+              <div className="flex justify-end gap-2 pt-2">
+                <button 
+                  onClick={() => {
+                    const target = viewCustomer;
+                    setViewCustomer(null);
+                    openEditModal(target);
+                  }}
+                  className="btn-primary text-xs flex items-center gap-1"
                 >
-                  <img src={viewCustomer.deploymentPaperPhoto} alt="Paper" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-slate-900/40 flex items-center justify-center text-white font-semibold text-xs gap-1 group-hover:bg-slate-900/60 transition-colors">
-                    <Eye className="w-4 h-4" /> Click to Inspect Signed Document
-                  </div>
-                </div>
+                  <Edit className="w-3.5 h-3.5" /> Edit This Store Info
+                </button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal: Register New Customer Store */}
-      {isAddModalOpen && (
+      {/* Modal: Register New Customer Store OR Edit Existing Store (Requirement 3) */}
+      {(isAddModalOpen || editingCustomer) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden border border-slate-100">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden border border-slate-100 max-h-[90vh] flex flex-col">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
               <div className="flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-brand-red" />
-                <h3 className="text-base font-bold text-slate-800">Register New Customer Store</h3>
+                <h3 className="text-base font-bold text-slate-800">
+                  {editingCustomer ? 'Edit Customer & Store Details' : 'Register New Customer Store'}
+                </h3>
               </div>
               <button 
-                onClick={() => setIsAddModalOpen(false)} 
+                onClick={() => { setIsAddModalOpen(false); setEditingCustomer(null); }} 
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleAddCustomer} className="p-6 space-y-4 text-xs">
+            <form onSubmit={editingCustomer ? handleSaveEditCustomer : handleAddCustomer} className="p-6 space-y-4 text-xs overflow-y-auto">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Customer / Store Name *</label>
@@ -682,7 +796,7 @@ export default function Customers() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Date Joined *</label>
                   <input 
@@ -702,6 +816,19 @@ export default function Customers() {
                     onChange={(e) => setFormData({...formData, contact: e.target.value})}
                     className="input-field text-xs" 
                   />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Store Status</label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({...formData, status: e.target.value})}
+                    className="input-field text-xs"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Pending Papers">Pending Papers</option>
+                    <option value="Pending Freezer">Pending Freezer</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
                 </div>
               </div>
 
@@ -762,63 +889,71 @@ export default function Customers() {
                 </div>
               </div>
 
-              {/* Freezer & Deployment Paper */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Assigned Freezer Model</label>
-                  <select 
-                    value={formData.freezerModel} 
-                    onChange={(e) => setFormData({...formData, freezerModel: e.target.value})}
-                    className="input-field text-xs"
-                  >
-                    <option value="Chest Freezer 200L">Chest Freezer 200L</option>
-                    <option value="Chest Freezer 300L">Chest Freezer 300L</option>
-                    <option value="Glass Top Freezer 400L">Glass Top Freezer 400L</option>
-                    <option value="Double Lid Chest Freezer 500L">Double Lid Chest Freezer 500L</option>
-                  </select>
+              {/* Requirement 3: Barcode No. Instead beside Freezer Serial # */}
+              <div className="p-3.5 bg-blue-50/40 rounded-xl border border-blue-100 space-y-3">
+                <div className="font-bold text-slate-800 flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-1.5">
+                    <Snowflake className="w-3.5 h-3.5 text-blue-500" /> Freezer Custody Details (Editable)
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-normal">Can be left empty if pending</span>
                 </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Freezer Serial #</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. SEL-FRZ-8821" 
-                    value={formData.freezerSerial}
-                    onChange={(e) => setFormData({...formData, freezerSerial: e.target.value})}
-                    className="input-field text-xs" 
-                  />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Freezer Serial #</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. SEL-FRZ-8821" 
+                      value={formData.freezerSerial}
+                      onChange={(e) => setFormData({...formData, freezerSerial: e.target.value})}
+                      className="input-field text-xs bg-white" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Barcode No.</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. 4800019201" 
+                      value={formData.barcodeNo}
+                      onChange={(e) => setFormData({...formData, barcodeNo: e.target.value})}
+                      className="input-field text-xs bg-white font-mono" 
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Photo of Signed Deployment Paper (URL or Upload Proof)
-                </label>
-                <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    placeholder="https://... or photo proof URL" 
-                    value={formData.deploymentPaperPhoto}
-                    onChange={(e) => setFormData({...formData, deploymentPaperPhoto: e.target.value})}
-                    className="input-field text-xs flex-1" 
-                  />
-                  <button 
-                    type="button" 
-                    onClick={() => setFormData({
-                      ...formData, 
-                      deploymentPaperPhoto: 'https://images.unsplash.com/photo-1568667256549-094345857637?auto=format&fit=crop&q=80&w=700'
-                    })}
-                    className="btn-secondary text-xs whitespace-nowrap"
-                  >
-                    Use Sample Doc
-                  </button>
+              {/* Requirement 2: Photos from Device */}
+              <div className="space-y-2 border border-slate-200 rounded-xl p-3 bg-slate-50">
+                <div className="flex justify-between items-center">
+                  <label className="block font-semibold text-slate-700">
+                    Signed Deployment Paper Photo (Upload From Device)
+                  </label>
+                  <span className="text-[10px] text-slate-400">Can attach later if pending</span>
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1">Photo copy of the signed Selecta Freezer Deployment & Custody Paper</p>
+
+                <input 
+                  type="file" 
+                  accept="image/*"
+                  onChange={handlePhotoUpload}
+                  className="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-brand-red file:text-white hover:file:bg-brand-dark cursor-pointer"
+                />
+
+                {formData.deploymentPaperPhoto && (
+                  <div className="mt-2 flex items-center gap-3">
+                    <div className="h-16 w-24 rounded-lg border border-slate-300 overflow-hidden bg-white">
+                      <img src={formData.deploymentPaperPhoto} alt="Paper Preview" className="h-full w-full object-cover" />
+                    </div>
+                    <div className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                      <CheckCircle2 className="w-4 h-4" /> Photo attached from device
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button 
                   type="button" 
-                  onClick={() => setIsAddModalOpen(false)} 
+                  onClick={() => { setIsAddModalOpen(false); setEditingCustomer(null); }} 
                   className="btn-secondary text-xs"
                 >
                   Cancel
@@ -827,7 +962,7 @@ export default function Customers() {
                   type="submit" 
                   className="btn-primary text-xs"
                 >
-                  Save Store Record
+                  {editingCustomer ? 'Update Store Information' : 'Save Customer Store'}
                 </button>
               </div>
             </form>
