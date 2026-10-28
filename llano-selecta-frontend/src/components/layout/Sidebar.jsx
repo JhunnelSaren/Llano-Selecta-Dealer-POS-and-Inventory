@@ -2,161 +2,179 @@ import React from 'react';
 import { NavLink as RouterNavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
-  Users,
-  Package,
-  UserCheck,
-  MapPin,
-  Snowflake,
-  ClipboardList,
-  ShoppingCart,
-  Truck,
+  Layers,
   Boxes,
-  AlertTriangle,
-  Receipt,
-  CreditCard,
-  Scale,
-  Camera,
-  Target,
-  BarChart3,
-  Shield,
-  History,
+  Building2,
+  TrendingUp,
+  Settings as SettingsIcon,
   X,
   IceCream
 } from 'lucide-react';
-
-const navigationGroups = [
-  {
-    title: 'OVERVIEW',
-    items: [
-      { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard }
-    ]
-  },
-  {
-    title: 'MASTER DATA',
-    items: [
-      { name: 'Customers / Stores', path: '/master/customers', icon: Users },
-      { name: 'Products', path: '/master/products', icon: Package },
-      { name: 'Employees', path: '/master/employees', icon: UserCheck },
-      { name: 'Areas & Routes', path: '/master/routes', icon: MapPin },
-      { name: 'Freezers Catalog', path: '/master/freezers', icon: Snowflake }
-    ]
-  },
-  {
-    title: 'OPERATIONS',
-    items: [
-      { name: 'Bookings', path: '/operations/bookings', icon: ClipboardList },
-      { name: 'SELECTA POs', path: '/operations/selecta-orders', icon: ShoppingCart },
-      { name: 'Stock Receiving', path: '/operations/receiving', icon: Boxes },
-      { name: 'Inventory Ledger', path: '/operations/inventory', icon: Package }
-    ]
-  },
-  {
-    title: 'DELIVERY & DISCREPANCIES',
-    items: [
-      { name: 'Dispatch & Packing', path: '/delivery/dispatch', icon: Truck },
-      { name: 'Missing & BO Log', path: '/delivery/discrepancies', icon: AlertTriangle }
-    ]
-  },
-  {
-    title: 'SALES & FINANCE',
-    items: [
-      { name: 'POS / Sales', path: '/finance/pos', icon: Receipt },
-      { name: 'Payments Collection', path: '/finance/payments', icon: CreditCard },
-      { name: 'Cash Reconciliation', path: '/finance/reconciliation', icon: Scale }
-    ]
-  },
-  {
-    title: 'MONITORING',
-    items: [
-      { name: 'SELECTA Quota', path: '/monitoring/quota', icon: Target }
-    ]
-  },
-  {
-    title: 'SYSTEM & REPORTS',
-    items: [
-      { name: 'Reports Center', path: '/reports', icon: BarChart3 },
-      { name: 'User Management', path: '/admin/users', icon: Shield },
-      { name: 'Audit Logs', path: '/admin/audit-logs', icon: History }
-    ]
-  }
-];
+import { useAuth } from '../../context/AuthContext';
 
 export default function Sidebar({ isOpen, onClose }) {
   const location = useLocation();
+  const { currentUser, systemSettings } = useAuth();
+
+  // Exactly Five Primary Navigation Items (Section 3 Requirements)
+  const navItems = [
+    {
+      to: '/dashboard',
+      label: 'Dashboard',
+      icon: LayoutDashboard,
+      badge: 'LIVE'
+    },
+    {
+      to: '/orders-delivery',
+      label: 'Orders & Delivery',
+      icon: Layers,
+      badge: null
+    },
+    {
+      to: '/inventory',
+      label: 'Inventory',
+      icon: Boxes,
+      badge: null
+    },
+    {
+      to: '/stores-freezers',
+      label: 'Stores & Freezers',
+      icon: Building2,
+      badge: null
+    },
+    {
+      to: '/sales-reports',
+      label: 'Sales & Reports',
+      icon: TrendingUp,
+      badge: null
+    }
+  ];
 
   return (
     <>
       {/* Mobile Overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-30 lg:hidden"
+          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 lg:hidden"
           onClick={onClose}
         />
       )}
 
+      {/* Main Sidebar Container (Fixed w-72 on Desktop) */}
       <aside
-        className={`no-print fixed top-0 left-0 z-40 h-screen w-64 bg-slate-900 text-slate-300 transition-transform duration-300 ease-in-out flex flex-col border-r border-slate-800 ${
+        className={`no-print fixed top-0 left-0 z-50 h-screen w-72 bg-slate-950 text-slate-300 transition-transform duration-300 ease-in-out flex flex-col border-r border-slate-800 shadow-2xl ${
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
-        {/* Brand Header */}
-        <div className="h-16 flex items-center justify-between px-5 bg-slate-950 border-b border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="bg-brand-red p-2 rounded-lg text-white shadow-md shadow-brand-red/20">
-              <IceCream className="w-5 h-5" />
+        {/* Dealership Brand Header */}
+        <div className="h-20 flex items-center justify-between px-5 bg-slate-950 border-b border-slate-800/80">
+          <RouterNavLink
+            to="/dashboard"
+            onClick={onClose}
+            className="flex items-center gap-3.5 group"
+          >
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-red-600 to-red-700 p-2 text-white shadow-lg shadow-red-600/30 flex items-center justify-center group-hover:scale-105 transition-transform">
+              {systemSettings?.dealer_logo_url ? (
+                <img
+                  src={systemSettings.dealer_logo_url}
+                  alt="Logo"
+                  className="w-full h-full object-contain"
+                />
+              ) : (
+                <IceCream className="w-6 h-6" />
+              )}
             </div>
-            <div>
-              <h1 className="font-bold text-white text-base leading-none tracking-tight">Llano SELECTA</h1>
-              <p className="text-[10px] text-slate-400 font-medium mt-0.5">Dealer POS & Inventory</p>
+            <div className="flex flex-col">
+              <span className="text-base font-black tracking-tight text-white flex items-center gap-1.5 leading-none">
+                LLANO <span className="text-red-500">SELECTA</span>
+              </span>
+              <span className="text-[11px] text-slate-400 font-medium tracking-wide mt-1">
+                Dealer POS & Inventory
+              </span>
             </div>
-          </div>
+          </RouterNavLink>
+
           <button
             onClick={onClose}
-            className="lg:hidden text-slate-400 hover:text-white p-1 rounded-md"
+            className="lg:hidden text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800"
+            aria-label="Close Navigation"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Scrollable Navigation Items */}
-        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
-          {navigationGroups.map((group, groupIdx) => (
-            <div key={groupIdx}>
-              <h3 className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                {group.title}
-              </h3>
-              <div className="space-y-0.5">
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+        {/* Primary Navigation Items (Exactly 5 Items) */}
+        <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-1.5 custom-scrollbar">
+          <div className="px-3 pb-2 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+            Primary Modules
+          </div>
 
-                  return (
-                    <RouterNavLink
-                      key={item.path}
-                      to={item.path}
-                      onClick={onClose}
-                      className={`flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
-                        isActive
-                          ? 'bg-brand-red text-white shadow-sm'
-                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                      }`}
-                    >
-                      <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                      <span>{item.name}</span>
-                    </RouterNavLink>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = location.pathname.startsWith(item.to);
+            return (
+              <RouterNavLink
+                key={item.to}
+                to={item.to}
+                onClick={onClose}
+                className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-medium text-sm transition-all duration-200 ${
+                  isActive
+                    ? 'bg-gradient-to-r from-red-600 to-red-700 text-white shadow-md shadow-red-600/30 font-semibold'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-900/90'
+                }`}
+              >
+                <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                <span className="flex-1 text-left">{item.label}</span>
+                {item.badge && (
+                  <span className="text-[10px] bg-red-500/20 text-red-300 px-2 py-0.5 rounded-full font-bold">
+                    {item.badge}
+                  </span>
+                )}
+              </RouterNavLink>
+            );
+          })}
+
+          <div className="pt-4 border-t border-slate-800/80 my-2"></div>
+
+          {/* Settings and Staff Management (Behind clearly labeled menu or gear icon) */}
+          <RouterNavLink
+            to="/settings"
+            onClick={onClose}
+            className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl font-medium text-xs transition-all duration-200 ${
+              location.pathname.startsWith('/settings')
+                ? 'bg-slate-800 text-white font-bold'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+            }`}
+          >
+            <SettingsIcon className="w-4 h-4 text-slate-400" />
+            <span className="flex-1 text-left">Settings & Staff</span>
+          </RouterNavLink>
         </div>
 
-        {/* Sidebar Footer */}
-        <div className="p-3 bg-slate-950/50 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
-          <span>v1.0.0 Stable</span>
-          <span className="text-emerald-500 font-medium flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Online
-          </span>
+        {/* Sidebar Footer with Active Role and Live Database Status */}
+        <div className="p-4 bg-slate-950 border-t border-slate-800/80 space-y-3">
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
+              <span className="text-slate-400 font-medium">PostgreSQL 18</span>
+            </div>
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-800 text-slate-300">
+              {currentUser?.role || 'Staff'}
+            </span>
+          </div>
+
+          <div className="bg-slate-900/90 rounded-xl p-2.5 border border-slate-800/80 flex items-center justify-between">
+            <div className="truncate">
+              <p className="text-xs font-bold text-white truncate">{currentUser?.name || 'Authorized User'}</p>
+              <p className="text-[10px] text-slate-400 truncate">@{currentUser?.username || 'user'}</p>
+            </div>
+            <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-1.5 py-0.5 rounded">
+              Active
+            </span>
+          </div>
         </div>
       </aside>
     </>

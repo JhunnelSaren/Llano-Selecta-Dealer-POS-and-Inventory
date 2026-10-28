@@ -7,11 +7,11 @@ export default function MainLayout({ children }) {
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      {/* Sidebar Component */}
+      {/* Sidebar Component (Fixed w-72 on desktop) */}
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      {/* Content Body */}
-      <div className="flex-1 flex flex-col lg:pl-64 min-w-0">
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col lg:pl-72 min-w-0">
         <Header toggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
         
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">

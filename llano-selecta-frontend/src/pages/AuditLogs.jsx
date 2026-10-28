@@ -227,7 +227,7 @@ export default function AuditLogs() {
               <option value="All">All Modules</option>
               <option value="Bookings">Bookings</option>
               <option value="Receiving">Stock Receiving</option>
-              <option value="Discrepancies">Discrepancies & BO</option>
+              <option value="Discrepancies">BO (Melted) Log</option>
               <option value="Finance">Finance & POS</option>
               <option value="Freezer">Freezer & Timemark</option>
               <option value="Quota">Quota</option>

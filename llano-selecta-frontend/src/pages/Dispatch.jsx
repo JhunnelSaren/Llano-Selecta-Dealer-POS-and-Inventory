@@ -246,6 +246,52 @@ export default function Dispatch() {
     setFormRemarks('');
   };
 
+  // Quick Action: Update Booking Packing / Dispatch Status (Short Buttons)
+  const handleUpdateBookingStatus = (bookingId, newStatus) => {
+    setActiveBookings(prev => prev.map(b => {
+      if (b.id === bookingId) {
+        return { ...b, dispatchStatus: newStatus };
+      }
+      return b;
+    }));
+  };
+
+  // Quick Action: Update Dispatch Trip Status (Short Buttons)
+  const handleUpdateTripStatus = (tripId, newStatus) => {
+    setDispatchTrips(prev => prev.map(t => {
+      if (t.id === tripId) {
+        return { ...t, status: newStatus };
+      }
+      return t;
+    }));
+    if (selectedTrip?.id === tripId) {
+      setSelectedTrip(prev => ({ ...prev, status: newStatus }));
+    }
+  };
+
+  // Quick Action: Update Specific Box Status inside a Trip
+  const handleUpdateBoxStatus = (tripId, boxIdx, newStatus) => {
+    setDispatchTrips(prev => prev.map(t => {
+      if (t.id === tripId) {
+        const updatedBoxes = [...t.boxes];
+        if (updatedBoxes[boxIdx]) {
+          updatedBoxes[boxIdx] = { ...updatedBoxes[boxIdx], sealStatus: newStatus };
+        }
+        return { ...t, boxes: updatedBoxes };
+      }
+      return t;
+    }));
+    if (selectedTrip?.id === tripId) {
+      setSelectedTrip(prev => {
+        const updatedBoxes = [...prev.boxes];
+        if (updatedBoxes[boxIdx]) {
+          updatedBoxes[boxIdx] = { ...updatedBoxes[boxIdx], sealStatus: newStatus };
+        }
+        return { ...prev, boxes: updatedBoxes };
+      });
+    }
+  };
+
   const filteredTrips = dispatchTrips.filter(t => 
     t.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     t.route.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -405,11 +451,47 @@ export default function Dispatch() {
                         <div className="text-[10px] text-slate-400">Taped & Sealed</div>
                       </td>
                       <td className="py-3 px-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                          trip.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                        }`}>
-                          {trip.status}
-                        </span>
+                        <div className="space-y-1.5">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                            trip.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' : 
+                            trip.status === 'Dispatched' ? 'bg-blue-100 text-blue-800' :
+                            'bg-amber-100 text-amber-800'
+                          }`}>
+                            {trip.status}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateTripStatus(trip.id, 'Packed')}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all ${
+                                trip.status === 'Packed' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              }`}
+                              title="Mark Trip as Packed"
+                            >
+                              📦 Packed
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateTripStatus(trip.id, 'Dispatched')}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all ${
+                                trip.status === 'Dispatched' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              }`}
+                              title="Mark Trip as Dispatched"
+                            >
+                              🚚 Dispatched
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateTripStatus(trip.id, 'Completed')}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all ${
+                                trip.status === 'Completed' ? 'bg-purple-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              }`}
+                              title="Mark Trip as Delivered & Completed"
+                            >
+                              ✓ Done
+                            </button>
+                          </div>
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-right">
                         <button 
@@ -466,11 +548,57 @@ export default function Dispatch() {
                       </td>
                       <td className="py-3 px-4 text-sm font-bold text-slate-900">{formatPHP(b.totalAmount)}</td>
                       <td className="py-3 px-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                          b.dispatchStatus.includes('Packed') ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                        }`}>
-                          {b.dispatchStatus}
-                        </span>
+                        <div className="space-y-1.5">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                            b.dispatchStatus === 'Dispatched' 
+                              ? 'bg-blue-100 text-blue-800 border border-blue-200' 
+                              : b.dispatchStatus.includes('Packed') 
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                              : 'bg-amber-100 text-amber-800 border border-amber-200'
+                          }`}>
+                            {b.dispatchStatus}
+                          </span>
+                          
+                          {/* Short Action Buttons as requested */}
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateBookingStatus(b.id, 'Pending Packing')}
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                                b.dispatchStatus === 'Pending Packing'
+                                  ? 'bg-amber-500 text-white shadow-xs'
+                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              }`}
+                              title="Set status to Pending"
+                            >
+                              Pending
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateBookingStatus(b.id, 'Packed')}
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                                b.dispatchStatus === 'Packed'
+                                  ? 'bg-emerald-600 text-white shadow-xs'
+                                  : 'bg-slate-100 text-slate-600 hover:bg-emerald-100 hover:text-emerald-800'
+                              }`}
+                              title="Mark as Packed into Ice Box"
+                            >
+                              📦 Packed
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateBookingStatus(b.id, 'Dispatched')}
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                                b.dispatchStatus === 'Dispatched'
+                                  ? 'bg-blue-600 text-white shadow-xs'
+                                  : 'bg-slate-100 text-slate-600 hover:bg-blue-100 hover:text-blue-800'
+                              }`}
+                              title="Mark as Dispatched on Bongo truck"
+                            >
+                              🚚 Dispatched
+                            </button>
+                          </div>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -705,9 +833,43 @@ export default function Dispatch() {
                           <p className="text-[10px] text-slate-500">{box.customerArea}</p>
                         </div>
                       </div>
-                      <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
-                        ✓ {box.sealStatus}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                          {box.sealStatus}
+                        </span>
+                        <div className="flex items-center gap-1 no-print">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateBoxStatus(selectedTrip.id, idx, 'Packed & Sealed')}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all ${
+                              box.sealStatus === 'Packed & Sealed' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-emerald-50 text-slate-700'
+                            }`}
+                            title="Mark Box Packed"
+                          >
+                            📦 Pack
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateBoxStatus(selectedTrip.id, idx, 'Dispatched')}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all ${
+                              box.sealStatus === 'Dispatched' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-blue-50 text-slate-700'
+                            }`}
+                            title="Mark Box Dispatched"
+                          >
+                            🚚 Dispatch
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateBoxStatus(selectedTrip.id, idx, 'Delivered')}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all ${
+                              box.sealStatus === 'Delivered' ? 'bg-purple-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-purple-50 text-slate-700'
+                            }`}
+                            title="Mark Box Delivered"
+                          >
+                            ✓ Done
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="text-xs divide-y divide-slate-100">

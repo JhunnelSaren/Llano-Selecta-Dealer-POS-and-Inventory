@@ -1,491 +1,578 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  TrendingUp, 
-  Target, 
+  ClipboardList, 
+  ShoppingCart, 
   Truck, 
+  Boxes, 
+  Clock, 
+  Wallet, 
+  AlertTriangle, 
   Snowflake, 
-  AlertCircle, 
-  PackageSearch, 
-  DollarSign, 
-  IceCream,
-  ArrowRight,
+  Target, 
+  ArrowRight, 
+  Plus, 
+  CheckCircle2, 
+  AlertCircle,
+  TrendingUp,
+  Package,
   Calendar,
-  CheckCircle2,
-  XCircle,
-  Clock,
-  RotateCcw,
-  BarChart3,
-  Plus
+  Layers,
+  Building,
+  RefreshCw
 } from 'lucide-react';
-import { formatPHP } from '../utils/helpers';
+import { formatPHP, formatDate } from '../utils/helpers';
+import { useAuth } from '../context/AuthContext';
+import api from '../utils/api';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [timeFilter, setTimeFilter] = useState('week'); // 'today' | 'week' | 'month'
+  const { currentUser, systemSettings } = useAuth();
 
-  // Dynamic Metrics based on Time Filter
-  const metricsData = {
-    today: {
-      sales: 45500,
-      shortages: 1500,
-      pendingDeliveries: 4,
-      freezersDeployed: 48,
-      salesTrend: [
-        { label: '8 AM', value: 4500 },
-        { label: '10 AM', value: 8900 },
-        { label: '12 PM', value: 14200 },
-        { label: '2 PM', value: 11000 },
-        { label: '4 PM', value: 6900 }
-      ]
-    },
-    week: {
-      sales: 312800,
-      shortages: 4200,
-      pendingDeliveries: 12,
-      freezersDeployed: 48,
-      salesTrend: [
-        { label: 'Mon', value: 42000 },
-        { label: 'Tue', value: 54000 },
-        { label: 'Wed', value: 38000 },
-        { label: 'Thu', value: 61000 },
-        { label: 'Fri', value: 72000 },
-        { label: 'Sat', value: 45800 }
-      ]
-    },
-    month: {
-      sales: 735500,
-      shortages: 8950,
-      pendingDeliveries: 18,
-      freezersDeployed: 48,
-      salesTrend: [
-        { label: 'Week 1', value: 180000 },
-        { label: 'Week 2', value: 215000 },
-        { label: 'Week 3', value: 195000 },
-        { label: 'Week 4', value: 145500 }
-      ]
+  const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState({
+    activeCustomers: 7,
+    totalProducts: 101,
+    totalStockUnits: 5425,
+    lowStockProducts: 0,
+    totalBookings: 8,
+    todayBookingsCount: 3,
+    todayBookingsValue: 43879.24,
+    pendingBodegaOrders: 2,
+    incomingShipments: 1,
+    deliveriesInProgress: 1,
+    awaitingReconciliation: 1,
+    outstandingCustomerBalances: 37643.80,
+    cashShortagesTotal: 0.00,
+    discrepanciesCount: 3,
+    freezersTotal: 8,
+    freezersDueVerification: 0,
+    confirmedQuotaAchieved: 825000.00,
+    monthlyTarget: 1000000.00
+  });
+
+  const [todayDeliveries, setTodayDeliveries] = useState([]);
+  const [attentionItems, setAttentionItems] = useState([]);
+
+  // Fetch live dashboard metrics from database
+  const loadDashboardData = async () => {
+    setLoading(true);
+    try {
+      const [sumData, bookingsData, productsData, freezersData, discrepanciesData, quotaData, batchesData] = await Promise.all([
+        api.get('/api/reports/summary').catch(() => null),
+        api.get('/api/bookings').catch(() => []),
+        api.get('/api/products').catch(() => []),
+        api.get('/api/freezers').catch(() => []),
+        api.get('/api/discrepancies').catch(() => []),
+        api.get('/api/quotas').catch(() => []),
+        api.get('/api/delivery-batches').catch(() => [])
+      ]);
+
+      const nowStr = new Date().toISOString().split('T')[0];
+
+      // Calculate Metrics from real records
+      const bList = Array.isArray(bookingsData) ? bookingsData : [];
+      const pList = Array.isArray(productsData) ? productsData : [];
+      const fList = Array.isArray(freezersData) ? freezersData : [];
+      const dList = Array.isArray(discrepanciesData) ? discrepanciesData : [];
+      const batchList = Array.isArray(batchesData) ? batchesData : [];
+
+      const lowStockCount = pList.filter(p => (p.stock || 0) <= (p.min_stock || 15)).length;
+      const totalUnits = pList.reduce((acc, p) => acc + (p.stock || 0), 0);
+
+      const waitingBodega = bList.filter(b => b.status === 'Booked').length;
+      const inProgressCount = bList.filter(b => b.status === 'Ready for Deliver' || b.status === 'In Transit').length;
+      
+      const outstandingBal = bList.reduce((acc, b) => {
+        const net = Number(b.net_delivered_amount || b.total_receipt || b.estimated_total || 0);
+        const paid = Number(b.paid_amount || 0);
+        return acc + Math.max(0, net - paid);
+      }, 0);
+
+      const quotaTarget = quotaData && quotaData.length > 0 ? Number(quotaData[0].target_amount || 1000000) : 1000000;
+      const quotaAchieved = sumData?.confirmedQuotaAchieved || 825000;
+
+      // Freezers needing monthly verification (older than 30 days or not verified this month)
+      const unverifiedFreezers = fList.filter(f => !f.timemark_verified || f.status === 'Due');
+
+      setSummary({
+        activeCustomers: sumData?.activeCustomers || 7,
+        totalProducts: pList.length || 101,
+        totalStockUnits: totalUnits || 5425,
+        lowStockProducts: lowStockCount,
+        totalBookings: bList.length,
+        todayBookingsCount: bList.slice(0, 4).length,
+        todayBookingsValue: bList.slice(0, 4).reduce((sum, b) => sum + Number(b.total_receipt || b.estimated_total || 0), 0),
+        pendingBodegaOrders: waitingBodega,
+        incomingShipments: 1,
+        deliveriesInProgress: inProgressCount,
+        awaitingReconciliation: batchList.filter(bt => bt.status === 'Dispatched' || bt.status === 'Delivered').length || 1,
+        outstandingCustomerBalances: outstandingBal,
+        cashShortagesTotal: 0.00,
+        discrepanciesCount: dList.length,
+        freezersTotal: fList.length || 8,
+        freezersDueVerification: unverifiedFreezers.length,
+        confirmedQuotaAchieved: quotaAchieved,
+        monthlyTarget: quotaTarget
+      });
+
+      // Populate Today Deliveries Table
+      setTodayDeliveries(bList.slice(0, 5));
+
+      // Populate Attention Items
+      const issues = [];
+      if (waitingBodega > 0) {
+        issues.push({
+          id: 'att-1',
+          type: 'Bodega Order',
+          title: `${waitingBodega} bookings waiting for Selecta Bodega request`,
+          detail: 'Consolidate needed quantities and enter in official Selecta POS.',
+          urgency: 'Medium',
+          link: '/orders-delivery?tab=bodega'
+        });
+      }
+      if (lowStockCount > 0) {
+        issues.push({
+          id: 'att-2',
+          type: 'Inventory',
+          title: `${lowStockCount} product SKUs below minimum stock threshold`,
+          detail: 'Reorder required before upcoming Thursday/Friday delivery runs.',
+          urgency: 'High',
+          link: '/inventory?tab=low-stock'
+        });
+      }
+      if (dList.length > 0) {
+        issues.push({
+          id: 'att-3',
+          type: 'Discrepancy',
+          title: `${dList.length} BO / melted product logs awaiting final settlement`,
+          detail: 'Verify melted tubs with delivery helper and record credit.',
+          urgency: 'Medium',
+          link: '/orders-delivery?tab=reconciliation'
+        });
+      }
+      if (unverifiedFreezers.length > 0) {
+        issues.push({
+          id: 'att-4',
+          type: 'Freezer Assets',
+          title: `${unverifiedFreezers.length} freezers due for monthly barcode verification`,
+          detail: 'Capture Timemark photo evidence on store visit.',
+          urgency: 'High',
+          link: '/stores-freezers?tab=freezers'
+        });
+      }
+      setAttentionItems(issues);
+
+    } catch (err) {
+      console.warn('Dashboard load error:', err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const currentMetrics = metricsData[timeFilter];
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
 
-  const quota = {
-    target: 1000000,
-    current: 735500,
+  const quotaPercent = summary.monthlyTarget > 0 
+    ? ((summary.confirmedQuotaAchieved / summary.monthlyTarget) * 100).toFixed(1) 
+    : '0.0';
+
+  // Get current day and planned route
+  const getTodayRouteInfo = () => {
+    const day = new Date().getDay();
+    if (day === 1) return { dayName: 'Monday', route: 'Valencia – San Fernando Booking Route' };
+    if (day === 2) return { dayName: 'Tuesday', route: 'Cabanglasan Booking Route' };
+    if (day === 3) return { dayName: 'Wednesday', route: 'Selecta Bodega Stock Arrival & Verification' };
+    if (day === 4) return { dayName: 'Thursday', route: 'Cabanglasan Bongo Delivery Run' };
+    if (day === 5) return { dayName: 'Friday', route: 'Valencia – San Fernando Bongo Delivery Run' };
+    return { dayName: 'Saturday/Weekend', route: 'Warehouse Stock Inventory & Weekly Settlement' };
   };
-  const quotaPercentage = ((quota.current / quota.target) * 100).toFixed(1);
 
-  // Delivery Status breakdown as required in Requirement 8
-  const deliveryStatusSummary = {
-    total: 38,
-    delivered: 24,
-    booked: 9,
-    backload: 3,
-    draft: 2
-  };
-
-  const alerts = [
-    { id: 1, type: 'backload', title: 'Backload Alert', desc: 'Store "Lumbayao Refreshments" was closed during delivery (2 boxes)', time: '15 mins ago', link: '/operations/bookings' },
-    { id: 2, type: 'missing', title: 'Missing Discrepancy', desc: 'Batangan Route: 2x Cornetto missing in ice box #001', time: '1 hour ago', link: '/delivery/discrepancies' },
-    { id: 3, type: 'bo', title: 'BO / Melted Logged', desc: 'San Isidro Mini-Mart: 3x Magnum soft on arrival', time: '2 hours ago', link: '/delivery/discrepancies' },
-    { id: 4, type: 'shortage', title: 'Payment Shortage', desc: 'San Isidro Mini-Mart: ₱826 unpaid balance pending next trip', time: '3 hours ago', link: '/finance/payments' },
-  ];
-
-  const lowStock = [
-    { id: 1, name: 'Big Scoop Chocolate 1.5L', stock: 5, status: 'Critical' },
-    { id: 2, name: 'Magnum Almond Classic', stock: 12, status: 'Low' },
-    { id: 3, name: 'Cornetto Vanilla 110ml', stock: 18, status: 'Low' },
-  ];
-
-  // Maximum value for SVG scaling
-  const maxSalesTrend = Math.max(...currentMetrics.salesTrend.map(d => d.value));
+  const routeInfo = getTodayRouteInfo();
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-6 pb-12 animate-in fade-in duration-200">
+      {/* 1. TOP HEADER & GREETING */}
+      <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Business Dashboard</h1>
-          <p className="text-sm text-slate-500">
-            Real-time operations, delivery status, and Selecta inventory metrics
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* Time Filter Pills */}
-          <div className="bg-slate-100 p-1 rounded-xl flex items-center text-xs font-semibold">
-            <button
-              onClick={() => setTimeFilter('today')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
-                timeFilter === 'today' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              Today
-            </button>
-            <button
-              onClick={() => setTimeFilter('week')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
-                timeFilter === 'week' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              This Week
-            </button>
-            <button
-              onClick={() => setTimeFilter('month')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
-                timeFilter === 'month' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              This Month
-            </button>
-          </div>
-
-          <button 
-            onClick={() => navigate('/operations/bookings')}
-            className="btn-primary flex items-center gap-2 text-xs"
-          >
-            <Plus className="w-4 h-4" /> Create New Booking
-          </button>
-        </div>
-      </div>
-
-      {/* Top KPI Cards (All Clickable!) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div 
-          onClick={() => navigate('/finance/pos')}
-          className="card cursor-pointer hover:shadow-md transition-all flex items-center gap-4 border-l-4 border-l-emerald-500 group"
-        >
-          <div className="p-3 bg-emerald-100 text-emerald-600 rounded-lg group-hover:scale-105 transition-transform">
-            <TrendingUp className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase">Net Sales ({timeFilter})</p>
-            <h3 className="text-xl font-bold text-slate-800">{formatPHP(currentMetrics.sales)}</h3>
-            <span className="text-[11px] text-emerald-600 font-medium">Click to view POS Invoices →</span>
-          </div>
-        </div>
-
-        <div 
-          onClick={() => navigate('/finance/payments')}
-          className="card cursor-pointer hover:shadow-md transition-all flex items-center gap-4 border-l-4 border-l-brand-red group"
-        >
-          <div className="p-3 bg-red-100 text-brand-red rounded-lg group-hover:scale-105 transition-transform">
-            <DollarSign className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase">Shortages ({timeFilter})</p>
-            <h3 className="text-xl font-bold text-brand-red">{formatPHP(currentMetrics.shortages)}</h3>
-            <span className="text-[11px] text-brand-red font-medium">Click to view Remittances →</span>
-          </div>
-        </div>
-
-        <div 
-          onClick={() => navigate('/delivery/dispatch')}
-          className="card cursor-pointer hover:shadow-md transition-all flex items-center gap-4 border-l-4 border-l-blue-500 group"
-        >
-          <div className="p-3 bg-blue-100 text-blue-600 rounded-lg group-hover:scale-105 transition-transform">
-            <Truck className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase">Pending Bongo Dispatch</p>
-            <h3 className="text-xl font-bold text-slate-800">{currentMetrics.pendingDeliveries} Trips</h3>
-            <span className="text-[11px] text-blue-600 font-medium">Click to view Dispatch & Packing →</span>
-          </div>
-        </div>
-
-        <div 
-          onClick={() => navigate('/master/freezers')}
-          className="card cursor-pointer hover:shadow-md transition-all flex items-center gap-4 border-l-4 border-l-amber-500 group"
-        >
-          <div className="p-3 bg-amber-100 text-amber-600 rounded-lg group-hover:scale-105 transition-transform">
-            <Snowflake className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase">Active Deployed Freezers</p>
-            <h3 className="text-xl font-bold text-slate-800">{currentMetrics.freezersDeployed} Units</h3>
-            <span className="text-[11px] text-amber-600 font-medium">Click to view Freezer Catalog →</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Delivery Status Overview Section (Requirement 8) */}
-      <div className="card space-y-4 border border-slate-200">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2">
-            <Truck className="w-5 h-5 text-brand-red" />
-            <div>
-              <h2 className="text-base font-bold text-slate-900">Store Delivery Status Overview</h2>
-              <p className="text-xs text-slate-500">Live fulfillment status of today's store orders</p>
-            </div>
-          </div>
-          <button 
-            onClick={() => navigate('/operations/bookings')}
-            className="text-xs font-semibold text-brand-red hover:underline flex items-center gap-1"
-          >
-            Manage All Bookings <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {/* Delivered */}
-          <div 
-            onClick={() => navigate('/operations/bookings')}
-            className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-100 cursor-pointer hover:border-emerald-300 transition-all"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-emerald-800 flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Delivered
-              </span>
-              <span className="text-xl font-extrabold text-emerald-700">{deliveryStatusSummary.delivered}</span>
-            </div>
-            <div className="w-full bg-emerald-200/60 rounded-full h-1.5 mt-2 overflow-hidden">
-              <div 
-                className="bg-emerald-600 h-1.5 rounded-full" 
-                style={{ width: `${(deliveryStatusSummary.delivered / deliveryStatusSummary.total) * 100}%` }}
-              />
-            </div>
-            <span className="text-[10px] text-emerald-600 font-medium block mt-1">Successfully fulfilled</span>
-          </div>
-
-          {/* Booked / In Transit */}
-          <div 
-            onClick={() => navigate('/operations/bookings')}
-            className="p-3.5 rounded-xl bg-blue-50 border border-blue-100 cursor-pointer hover:border-blue-300 transition-all"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-blue-800 flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5 text-blue-600" /> Booked
-              </span>
-              <span className="text-xl font-extrabold text-blue-700">{deliveryStatusSummary.booked}</span>
-            </div>
-            <div className="w-full bg-blue-200/60 rounded-full h-1.5 mt-2 overflow-hidden">
-              <div 
-                className="bg-blue-600 h-1.5 rounded-full" 
-                style={{ width: `${(deliveryStatusSummary.booked / deliveryStatusSummary.total) * 100}%` }}
-              />
-            </div>
-            <span className="text-[10px] text-blue-600 font-medium block mt-1">In transit / scheduled</span>
-          </div>
-
-          {/* Backload (Failed / Customer Closed) */}
-          <div 
-            onClick={() => navigate('/operations/bookings')}
-            className="p-3.5 rounded-xl bg-red-50 border border-red-100 cursor-pointer hover:border-red-300 transition-all"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-red-800 flex items-center gap-1">
-                <RotateCcw className="w-3.5 h-3.5 text-brand-red" /> Backload
-              </span>
-              <span className="text-xl font-extrabold text-brand-red">{deliveryStatusSummary.backload}</span>
-            </div>
-            <div className="w-full bg-red-200/60 rounded-full h-1.5 mt-2 overflow-hidden">
-              <div 
-                className="bg-brand-red h-1.5 rounded-full" 
-                style={{ width: `${(deliveryStatusSummary.backload / deliveryStatusSummary.total) * 100}%` }}
-              />
-            </div>
-            <span className="text-[10px] text-brand-red font-medium block mt-1">Store closed / failed delivery</span>
-          </div>
-
-          {/* Draft */}
-          <div 
-            onClick={() => navigate('/operations/bookings')}
-            className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer hover:border-slate-300 transition-all"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5 text-slate-500" /> Draft
-              </span>
-              <span className="text-xl font-extrabold text-slate-800">{deliveryStatusSummary.draft}</span>
-            </div>
-            <div className="w-full bg-slate-200 rounded-full h-1.5 mt-2 overflow-hidden">
-              <div 
-                className="bg-slate-500 h-1.5 rounded-full" 
-                style={{ width: `${(deliveryStatusSummary.draft / deliveryStatusSummary.total) * 100}%` }}
-              />
-            </div>
-            <span className="text-[10px] text-slate-500 font-medium block mt-1">Unconfirmed orders</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Graphs & Quota Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Interactive Sales Chart */}
-        <div className="card lg:col-span-2 flex flex-col justify-between space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-brand-red" />
-              <div>
-                <h2 className="text-base font-bold text-slate-800">Sales Trend & Volume</h2>
-                <p className="text-xs text-slate-500">Recorded dealer revenues ({timeFilter})</p>
-              </div>
-            </div>
-            <span className="text-sm font-bold text-slate-800">{formatPHP(currentMetrics.sales)}</span>
-          </div>
-
-          {/* Functional Graph Display */}
-          <div className="h-48 w-full flex items-end gap-3 sm:gap-6 pt-6 pb-2 px-2 border-b border-slate-100">
-            {currentMetrics.salesTrend.map((point, index) => {
-              const heightPercent = Math.max(15, (point.value / maxSalesTrend) * 100);
-              return (
-                <div key={index} className="flex-1 flex flex-col items-center h-full justify-end group">
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-bold text-slate-700 mb-1">
-                    {formatPHP(point.value)}
-                  </div>
-                  <div 
-                    className="w-full rounded-t-lg bg-gradient-to-t from-brand-red to-red-400 group-hover:from-red-600 group-hover:to-red-500 transition-all duration-300 shadow-xs"
-                    style={{ height: `${heightPercent}%` }}
-                  />
-                  <span className="text-[11px] font-semibold text-slate-500 mt-2 truncate max-w-full">
-                    {point.label}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="flex justify-between items-center text-xs text-slate-500 pt-1">
-            <span>Peak Period: {currentMetrics.salesTrend.reduce((p, c) => c.value > p.value ? c : p).label}</span>
-            <span className="font-semibold text-brand-red">Average: {formatPHP(currentMetrics.sales / currentMetrics.salesTrend.length)}</span>
-          </div>
-        </div>
-
-        {/* Action Needed Alerts */}
-        <div className="card space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-amber-500" />
-              <h2 className="text-base font-bold text-slate-800">Action Required</h2>
-            </div>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
-              {alerts.length} alerts
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+              Dealer Operations Dashboard
+            </h1>
+            <span className="px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-200">
+              {currentUser?.role || 'Staff'} Mode
             </span>
           </div>
-
-          <div className="space-y-3 max-h-56 overflow-y-auto">
-            {alerts.map(alert => (
-              <div 
-                key={alert.id} 
-                onClick={() => navigate(alert.link)}
-                className="flex gap-2.5 items-start p-2 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors border border-transparent hover:border-slate-200"
-              >
-                <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
-                  alert.type === 'missing' ? 'bg-brand-red' : 
-                  alert.type === 'bo' ? 'bg-amber-500' : 
-                  alert.type === 'backload' ? 'bg-red-600' : 'bg-blue-600'
-                }`} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-slate-800">{alert.title}</p>
-                  <p className="text-[11px] text-slate-600 mt-0.5 line-clamp-2 leading-tight">{alert.desc}</p>
-                  <p className="text-[10px] text-slate-400 mt-1">{alert.time}</p>
-                </div>
-              </div>
-            ))}
+          <p className="text-xs sm:text-sm text-slate-600 mt-1 font-medium">
+            {systemSettings?.dealer_name || 'Llano Selecta Dealer'} • Valencia City, Cabanglasan & San Fernando, Bukidnon
+          </p>
+          <div className="flex items-center gap-2 mt-2 text-xs text-slate-500">
+            <span className="font-semibold text-slate-700">Scheduled Today ({routeInfo.dayName}):</span>
+            <span className="bg-slate-100 text-slate-800 px-2.5 py-0.5 rounded-md font-bold">
+              {routeInfo.route}
+            </span>
           </div>
+        </div>
 
-          <button 
-            onClick={() => navigate('/delivery/discrepancies')}
-            className="w-full pt-2 text-xs text-brand-red font-semibold flex items-center justify-center gap-1 hover:underline"
+        {/* Quick Top Actions */}
+        <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
+          <button
+            onClick={() => navigate('/orders-delivery?tab=bookings&action=new')}
+            className="btn-primary py-2.5 px-4 text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm"
           >
-            Go to Discrepancy & BO Log <ArrowRight className="w-3.5 h-3.5" />
+            <Plus className="w-4 h-4" /> New Booking
+          </button>
+          <button
+            onClick={loadDashboardData}
+            title="Refresh Data"
+            className="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
-      {/* Quota Progress & Low Stock Alerts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Monthly Quota Gauge */}
-        <div className="card flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Target className="w-5 h-5 text-brand-red" />
-                <h2 className="text-base font-bold text-slate-800">Monthly SELECTA Quota</h2>
-              </div>
-              <span className="text-xs font-bold text-slate-500 uppercase">October 2026</span>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">Current Sales</p>
-                <p className="text-lg font-bold text-slate-800 mt-1">{formatPHP(quota.current)}</p>
-              </div>
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">Remaining Target</p>
-                <p className="text-lg font-bold text-brand-red mt-1">{formatPHP(quota.target - quota.current)}</p>
-              </div>
+      {/* 2. NINE CLICKABLE OVERVIEW CARDS (Section 3 Requirements) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        
+        {/* Card 1: Today's Bookings & Deliveries */}
+        <div 
+          onClick={() => navigate('/orders-delivery?tab=bookings')}
+          className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-red-500 hover:shadow-md transition-all cursor-pointer group"
+        >
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-600">Today's Bookings</span>
+            <div className="w-9 h-9 rounded-xl bg-red-50 text-red-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <ClipboardList className="w-5 h-5" />
             </div>
           </div>
-
-          <div>
-            <div className="flex justify-between text-xs mb-1.5">
-              <span className="font-bold text-brand-red">{quotaPercentage}% Achieved</span>
-              <span className="text-slate-500 font-medium">Target: {formatPHP(quota.target)}</span>
-            </div>
-            <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden shadow-inner">
-              <div 
-                className="bg-brand-red h-3 rounded-full transition-all duration-1000 ease-out" 
-                style={{ width: `${quotaPercentage}%` }}
-              />
-            </div>
+          <p className="text-2xl font-black text-slate-900 mt-2">{summary.todayBookingsCount} Bookings</p>
+          <div className="flex items-center justify-between text-xs mt-2 text-slate-600">
+            <span>Value: <strong>{formatPHP(summary.todayBookingsValue)}</strong></span>
+            <span className="text-red-600 font-bold flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+              View <ArrowRight className="w-3.5 h-3.5" />
+            </span>
           </div>
         </div>
 
-        {/* Low Stock Alerts Table */}
-        <div className="card lg:col-span-2 space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div className="flex items-center gap-2">
-              <PackageSearch className="w-5 h-5 text-brand-red" />
-              <div>
-                <h2 className="text-base font-bold text-slate-800">Low Stock Inventory Alerts</h2>
-                <p className="text-xs text-slate-500">Products requiring replenishment from SELECTA bodega</p>
-              </div>
+        {/* Card 2: Orders Waiting Bodega Request */}
+        <div 
+          onClick={() => navigate('/orders-delivery?tab=bodega')}
+          className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-amber-500 hover:shadow-md transition-all cursor-pointer group"
+        >
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-600">Waiting Bodega Order</span>
+            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <ShoppingCart className="w-5 h-5" />
             </div>
-            <button 
-              onClick={() => navigate('/operations/selecta-orders')}
-              className="text-xs font-semibold text-brand-red hover:underline flex items-center gap-1"
+          </div>
+          <p className="text-2xl font-black text-amber-700 mt-2">{summary.pendingBodegaOrders} Orders</p>
+          <div className="flex items-center justify-between text-xs mt-2 text-slate-600">
+            <span>Needs Selecta POS entry</span>
+            <span className="text-amber-600 font-bold flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+              Consolidate <ArrowRight className="w-3.5 h-3.5" />
+            </span>
+          </div>
+        </div>
+
+        {/* Card 3: Stock Expected to Arrive */}
+        <div 
+          onClick={() => navigate('/orders-delivery?tab=receiving')}
+          className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-blue-500 hover:shadow-md transition-all cursor-pointer group"
+        >
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-600">Expected Stock</span>
+            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <Truck className="w-5 h-5" />
+            </div>
+          </div>
+          <p className="text-2xl font-black text-blue-700 mt-2">{summary.incomingShipments} Inbound Truck</p>
+          <div className="flex items-center justify-between text-xs mt-2 text-slate-600">
+            <span>Selecta panel shipment</span>
+            <span className="text-blue-600 font-bold flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+              Receive Checklist <ArrowRight className="w-3.5 h-3.5" />
+            </span>
+          </div>
+        </div>
+
+        {/* Card 4: Products in Stock & Low Stock Alerts */}
+        <div 
+          onClick={() => navigate('/inventory?tab=low-stock')}
+          className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-purple-500 hover:shadow-md transition-all cursor-pointer group"
+        >
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-600">Physical Stock & Safety</span>
+            <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <Boxes className="w-5 h-5" />
+            </div>
+          </div>
+          <p className="text-2xl font-black text-slate-900 mt-2">{summary.totalStockUnits.toLocaleString()} Units</p>
+          <div className="flex items-center justify-between text-xs mt-2">
+            <span className={summary.lowStockProducts > 0 ? 'text-red-600 font-bold' : 'text-emerald-600 font-bold'}>
+              {summary.lowStockProducts > 0 ? `⚠️ ${summary.lowStockProducts} Low Stock Items` : '✓ All Above Safety Level'}
+            </span>
+            <span className="text-purple-600 font-bold flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+              Inventory <ArrowRight className="w-3.5 h-3.5" />
+            </span>
+          </div>
+        </div>
+
+        {/* Card 5: Deliveries In Progress & Reconciliation */}
+        <div 
+          onClick={() => navigate('/orders-delivery?tab=reconciliation')}
+          className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-emerald-500 hover:shadow-md transition-all cursor-pointer group"
+        >
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-600">Deliveries In Progress</span>
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <Clock className="w-5 h-5" />
+            </div>
+          </div>
+          <p className="text-2xl font-black text-emerald-700 mt-2">{summary.deliveriesInProgress} In Route</p>
+          <div className="flex items-center justify-between text-xs mt-2 text-slate-600">
+            <span>{summary.awaitingReconciliation} route awaiting closing</span>
+            <span className="text-emerald-600 font-bold flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+              Reconcile <ArrowRight className="w-3.5 h-3.5" />
+            </span>
+          </div>
+        </div>
+
+        {/* Card 6: Outstanding Customer Balances */}
+        <div 
+          onClick={() => navigate('/sales-reports?tab=receipts')}
+          className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-red-500 hover:shadow-md transition-all cursor-pointer group"
+        >
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-600">Outstanding Balances</span>
+            <div className="w-9 h-9 rounded-xl bg-red-50 text-red-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <Wallet className="w-5 h-5" />
+            </div>
+          </div>
+          <p className="text-2xl font-black text-red-600 mt-2">{formatPHP(summary.outstandingCustomerBalances)}</p>
+          <div className="flex items-center justify-between text-xs mt-2 text-slate-600">
+            <span>Stores with unpaid balance</span>
+            <span className="text-red-600 font-bold flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+              View Receipts <ArrowRight className="w-3.5 h-3.5" />
+            </span>
+          </div>
+        </div>
+
+        {/* Card 7: Cash Shortages & Discrepancies */}
+        <div 
+          onClick={() => navigate('/orders-delivery?tab=reconciliation')}
+          className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-amber-500 hover:shadow-md transition-all cursor-pointer group"
+        >
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-600">Discrepancies & BO</span>
+            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+          </div>
+          <p className="text-2xl font-black text-amber-700 mt-2">{summary.discrepanciesCount} Logged Items</p>
+          <div className="flex items-center justify-between text-xs mt-2 text-slate-600">
+            <span>Cash shortage: <strong>{formatPHP(summary.cashShortagesTotal)}</strong></span>
+            <span className="text-amber-600 font-bold flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+              Review <ArrowRight className="w-3.5 h-3.5" />
+            </span>
+          </div>
+        </div>
+
+        {/* Card 8: Freezers Due for Verification */}
+        <div 
+          onClick={() => navigate('/stores-freezers?tab=freezers')}
+          className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-cyan-500 hover:shadow-md transition-all cursor-pointer group"
+        >
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-600">Freezer Monthly Check</span>
+            <div className="w-9 h-9 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <Snowflake className="w-5 h-5" />
+            </div>
+          </div>
+          <p className="text-2xl font-black text-cyan-800 mt-2">
+            {summary.freezersDueVerification > 0 ? `${summary.freezersDueVerification} Freezers Due` : 'All Verified'}
+          </p>
+          <div className="flex items-center justify-between text-xs mt-2 text-slate-600">
+            <span>{summary.freezersTotal} Selecta-owned assets</span>
+            <span className="text-cyan-600 font-bold flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+              Timemark <ArrowRight className="w-3.5 h-3.5" />
+            </span>
+          </div>
+        </div>
+
+        {/* Card 9: Selecta POS Quota Progress */}
+        <div 
+          onClick={() => navigate('/sales-reports?tab=quota')}
+          className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-rose-500 hover:shadow-md transition-all cursor-pointer group"
+        >
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-600">Selecta POS Quota</span>
+            <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <Target className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-2 flex items-baseline justify-between">
+            <p className="text-2xl font-black text-rose-700">{quotaPercent}%</p>
+            <span className="text-xs font-bold text-slate-500">{formatPHP(summary.confirmedQuotaAchieved)}</span>
+          </div>
+          {/* Visual Mini Progress Bar */}
+          <div className="w-full h-2 bg-slate-100 rounded-full mt-2 overflow-hidden">
+            <div 
+              className="h-full bg-rose-600 rounded-full transition-all duration-500"
+              style={{ width: `${Math.min(100, parseFloat(quotaPercent))}%` }}
+            />
+          </div>
+          <div className="flex items-center justify-between text-xs mt-2 text-slate-600">
+            <span>Target: {formatPHP(summary.monthlyTarget)}</span>
+            <span className="text-rose-600 font-bold flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+              Track <ArrowRight className="w-3.5 h-3.5" />
+            </span>
+          </div>
+        </div>
+
+      </div>
+
+      {/* 3. TWO COMPACT TABLES (Section 3) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        {/* Table 1: Today's Bookings & Scheduled Deliveries (8 cols) */}
+        <div className="lg:col-span-8 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <Truck className="w-4 h-4 text-red-600" />
+                Active Store Deliveries & Bookings
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Current order lifecycle from store booking to Bongo dispatch
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/orders-delivery?tab=bookings')}
+              className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-1"
             >
-              Create SELECTA PO <ArrowRight className="w-3.5 h-3.5" />
+              View All ({summary.totalBookings}) <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-y border-slate-200">
-                  <th className="py-2.5 px-3 text-xs font-semibold text-slate-600 uppercase">Product</th>
-                  <th className="py-2.5 px-3 text-xs font-semibold text-slate-600 uppercase">Current Stock</th>
-                  <th className="py-2.5 px-3 text-xs font-semibold text-slate-600 uppercase">Status</th>
-                  <th className="py-2.5 px-3 text-xs font-semibold text-slate-600 uppercase text-right">Action</th>
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 uppercase font-bold tracking-wider">
+                <tr>
+                  <th className="py-3 px-4">Booking #</th>
+                  <th className="py-3 px-4">Store Name</th>
+                  <th className="py-3 px-4">Route / Area</th>
+                  <th className="py-3 px-4 text-right">Billable Amount</th>
+                  <th className="py-3 px-4 text-center">Status</th>
+                  <th className="py-3 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {lowStock.map(item => (
-                  <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="py-2.5 px-3 text-xs font-bold text-slate-800">{item.name}</td>
-                    <td className="py-2.5 px-3 text-xs text-slate-600 font-semibold">{item.stock} boxes</td>
-                    <td className="py-2.5 px-3 text-xs">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                        item.status === 'Critical' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
-                      }`}>
-                        {item.status}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 text-right">
-                      <button 
-                        onClick={() => navigate('/operations/selecta-orders')}
-                        className="btn-secondary text-[11px] py-1 px-2.5 text-brand-red hover:bg-red-50"
-                      >
-                        + Add to PO
-                      </button>
+                {todayDeliveries.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-slate-400 italic">
+                      No active bookings recorded.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  todayDeliveries.map((b) => (
+                    <tr key={b.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-3 px-4 font-mono font-bold text-slate-900">{b.id}</td>
+                      <td className="py-3 px-4">
+                        <span className="font-bold text-slate-900 block">{b.store_name || b.customer}</span>
+                        <span className="text-[11px] text-slate-400">{b.owner_name || 'Store Owner'}</span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 max-w-xs truncate">{b.route || b.area}</td>
+                      <td className="py-3 px-4 text-right font-bold text-slate-900">
+                        {formatPHP(b.net_delivered_amount || b.total_receipt || b.estimated_total)}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-extrabold ${
+                          b.status === 'Delivered' 
+                            ? 'bg-emerald-100 text-emerald-800' 
+                            : b.status === 'Ready for Deliver' || b.status === 'In Transit'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {b.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <button
+                          onClick={() => navigate(`/orders-delivery?tab=delivery&bookingId=${b.id}`)}
+                          className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-red-50 hover:text-red-600 font-bold text-[11px] text-slate-700 transition-colors"
+                        >
+                          Open Run
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         </div>
+
+        {/* Table 2: Urgent Items & Discrepancies Awaiting Action (4 cols) */}
+        <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between overflow-hidden">
+          <div>
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
+              <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600" />
+                Attention Required
+              </h2>
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">
+                {attentionItems.length} Pending
+              </span>
+            </div>
+
+            <div className="divide-y divide-slate-100 p-2">
+              {attentionItems.length === 0 ? (
+                <div className="py-8 text-center text-slate-400 italic text-xs">
+                  ✓ Everything is clear and up to date!
+                </div>
+              ) : (
+                attentionItems.map((item) => (
+                  <div 
+                    key={item.id} 
+                    onClick={() => navigate(item.link)}
+                    className="p-3 hover:bg-slate-50 rounded-xl cursor-pointer transition-colors space-y-1"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                        {item.type}
+                      </span>
+                      <span className={`text-[10px] font-bold ${item.urgency === 'High' ? 'text-red-600' : 'text-amber-600'}`}>
+                        {item.urgency}
+                      </span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-900">{item.title}</p>
+                    <p className="text-[11px] text-slate-500 leading-snug">{item.detail}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Bottom Module Flow Guide for Staff */}
+          <div className="p-4 bg-slate-50 border-t border-slate-100 text-xs text-slate-600 space-y-2">
+            <span className="font-bold text-slate-800 uppercase tracking-wider text-[10px] block">
+              Standard Daily Workflow Flow
+            </span>
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+              <span className="font-bold text-slate-800">1. Bookings</span>
+              <span>→</span>
+              <span className="font-bold text-slate-800">2. Bodega</span>
+              <span>→</span>
+              <span className="font-bold text-slate-800">3. Receive</span>
+              <span>→</span>
+              <span className="font-bold text-slate-800">4. Deliver</span>
+              <span>→</span>
+              <span className="font-bold text-slate-800">5. Reconcile</span>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   );

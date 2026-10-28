@@ -234,7 +234,7 @@
     "start": "node index.js",
     "server": "node index.js",
     "dev": "npm --prefix llano-selecta-frontend run dev",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test_business_rules.js"
   },
   "keywords": [],
   "author": "",

@@ -14,6 +14,8 @@ import {
   FolderPlus
 } from 'lucide-react';
 import { formatPHP } from '../utils/helpers';
+import { FileSpreadsheet } from 'lucide-react';
+import ExcelImportModal from '../components/ExcelImportModal';
 import { INITIAL_PRODUCTS, SELECTA_CATEGORIES } from '../utils/productCatalog';
 
 export default function Products() {
@@ -27,6 +29,7 @@ export default function Products() {
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [editingProduct, setEditingProduct] = useState(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Product Form State
   const [formData, setFormData] = useState({
@@ -551,6 +554,7 @@ export default function Products() {
           </div>
         </div>
       )}
+      <ExcelImportModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onImportSuccess={() => window.location.reload()} type="products" />
     </div>
   );
 }

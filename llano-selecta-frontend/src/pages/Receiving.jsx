@@ -425,35 +425,50 @@ export default function Receiving() {
               </div>
 
               {/* Add Categories and Flavors to Receiving */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Add Category Products Being Unloaded from Van:
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                <label className="block text-xs font-bold text-slate-700 uppercase">
+                  Products & Quantities Received (Category & Flavor Selection)
                 </label>
-                <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-thin">
-                  {SELECTA_CATEGORIES.map(cat => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => setSelectedCategory(cat)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
-                        selectedCategory === cat ? 'bg-brand-red text-white' : 'bg-slate-100 text-slate-600'
-                      }`}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                  <div className="sm:col-span-5">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Category</label>
+                    <select
+                      value={selectedCategory}
+                      onChange={(e) => setSelectedCategory(e.target.value)}
+                      className="input-field text-xs font-bold bg-white"
                     >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-1.5 mt-2 max-h-24 overflow-y-auto p-2 bg-slate-50 rounded border border-slate-200">
-                  {INITIAL_PRODUCTS.filter(p => p.category === selectedCategory).map(prod => (
-                    <button
-                      key={prod.id}
-                      type="button"
-                      onClick={() => handleAddItemFromCategory(prod)}
-                      className="px-2.5 py-1 bg-white border border-slate-200 rounded text-[11px] font-semibold hover:border-brand-red hover:text-brand-red"
+                      {SELECTA_CATEGORIES.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="sm:col-span-5">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Product / Flavor</label>
+                    <select
+                      id="selecta-flavor-picker"
+                      className="input-field text-xs font-bold bg-white"
+                      defaultValue=""
+                      onChange={(e) => {
+                        const prod = INITIAL_PRODUCTS.find(p => p.id === e.target.value);
+                        if (prod) {
+                          handleAddItemFromCategory(prod);
+                          e.target.value = '';
+                        }
+                      }}
                     >
-                      + {prod.name}
-                    </button>
-                  ))}
+                      <option value="">-- Choose {selectedCategory} Product to Add --</option>
+                      {INITIAL_PRODUCTS.filter(p => p.category === selectedCategory).map(prod => (
+                        <option key={prod.id} value={prod.id}>
+                          {prod.name} ({formatPHP(prod.dealerPrice || prod.unit_price)})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2 pt-4">
+                    <span className="text-[10px] text-slate-400 font-semibold block text-center">
+                      Auto-adds to list below
+                    </span>
+                  </div>
                 </div>
               </div>
 

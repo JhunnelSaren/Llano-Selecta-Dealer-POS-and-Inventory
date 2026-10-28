@@ -17,4 +17,6 @@ for (const envPath of candidateEnvPaths) {
 }
 
 // Launch backend server
-import('./llano-selecta-frontend/server/index.js');
+import('./llano-selecta-frontend/server/index.js')
+  .then(() => console.log('Backend server initialized successfully.'))
+  .catch((err) => console.error('Failed to start backend server:', err));

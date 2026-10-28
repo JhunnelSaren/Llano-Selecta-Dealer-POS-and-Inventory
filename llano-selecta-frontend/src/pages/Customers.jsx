@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Store, 
   User, 
@@ -26,21 +26,62 @@ import {
 } from 'lucide-react';
 import { INITIAL_CUSTOMERS } from '../utils/productCatalog';
 import { formatDate } from '../utils/helpers';
+import { FileSpreadsheet } from 'lucide-react';
+import ExcelImportModal from '../components/ExcelImportModal';
+import { OFFICIAL_BARANGAYS, COMMON_PUROKS, BUKIDNON_AREAS } from '../utils/areasData';
 
 export default function Customers() {
-  const [customers, setCustomers] = useState(
-    INITIAL_CUSTOMERS.map(c => ({
+  const [customers, setCustomers] = useState(() => {
+    try {
+      const saved = localStorage.getItem('llano_selecta_customers');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return INITIAL_CUSTOMERS.map(c => ({
       ...c,
       barcodeNo: c.barcodeNo || `4800019${c.id.replace('CUST-', '')}01`,
       freezerSerial: c.freezerSerial || `SEL-FRZ-88${c.id.replace('CUST-', '')}`,
       status: c.status || 'Active'
-    }))
-  );
+    }));
+  });
+
+  // Sync from PostgreSQL backend on mount
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/customers');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            const mapped = data.map(c => ({
+              id: c.id,
+              store_name: c.store_name,
+              owner: c.owner,
+              dateJoined: c.date_joined ? c.date_joined.split('T')[0] : c.dateJoined,
+              area: c.area,
+              subArea: c.sub_area || c.subArea || '',
+              purok: c.purok || '',
+              contact: c.contact || '',
+              freezerSerial: c.freezer_serial || c.freezerSerial || '',
+              barcodeNo: c.barcode_no || c.barcodeNo || '',
+              status: c.status || 'Active',
+              deploymentPaperRef: c.deployment_paper_ref || c.deploymentPaperRef || '',
+              deploymentPaperPhoto: c.deploymentPaperPhoto || ''
+            }));
+            setCustomers(mapped);
+            localStorage.setItem('llano_selecta_customers', JSON.stringify(mapped));
+          }
+        }
+      } catch (err) {}
+    };
+
+    fetchCustomers();
+  }, []);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMainArea, setSelectedMainArea] = useState('ALL');
   const [selectedSubArea, setSelectedSubArea] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   
   // Modals
   const [viewCustomer, setViewCustomer] = useState(null);
@@ -64,9 +105,9 @@ export default function Customers() {
     deploymentPaperPhoto: ''
   });
 
-  const valenciaSubAreas = ['Batangan', 'Kahaponan', 'Ventar', 'San-Isidro', 'Sinabuagan', 'Lumbayao'];
-  const sanFernandoSubAreas = ['San Fernando Poblacion', 'Halapitan'];
-  const cabanglasanSubAreas = ['Cabanglasan Centro', 'Mandaing'];
+  const valenciaSubAreas = OFFICIAL_BARANGAYS.Valencia;
+  const sanFernandoSubAreas = OFFICIAL_BARANGAYS['San Fernando'];
+  const cabanglasanSubAreas = OFFICIAL_BARANGAYS.Cabanglasan;
 
   // Handle Device Photo Upload
   const handlePhotoUpload = (e) => {
@@ -99,40 +140,56 @@ export default function Customers() {
     });
   };
 
-  // Save Edit Customer
-  const handleSaveEditCustomer = (e) => {
+  // Save Edit Customer with PostgreSQL sync
+  const handleSaveEditCustomer = async (e) => {
     e.preventDefault();
     if (!formData.store_name || !formData.owner) {
       alert('Please fill in Store Name and Owner Name');
       return;
     }
 
-    setCustomers(customers.map(c => {
-      if (c.id === editingCustomer.id) {
-        return {
-          ...c,
+    const updatedCust = {
+      ...editingCustomer,
+      store_name: formData.store_name,
+      owner: formData.owner,
+      dateJoined: formData.dateJoined,
+      area: formData.area,
+      subArea: formData.subArea,
+      purok: formData.purok,
+      contact: formData.contact,
+      freezerSerial: formData.freezerSerial,
+      barcodeNo: formData.barcodeNo,
+      status: formData.status,
+      deploymentPaperRef: formData.deploymentPaperRef,
+      deploymentPaperPhoto: formData.deploymentPaperPhoto
+    };
+
+    try {
+      await fetch(`http://localhost:5000/api/customers/${editingCustomer.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           store_name: formData.store_name,
           owner: formData.owner,
-          dateJoined: formData.dateJoined,
           area: formData.area,
-          subArea: formData.subArea,
+          sub_area: formData.subArea,
           purok: formData.purok,
           contact: formData.contact,
-          freezerSerial: formData.freezerSerial,
-          barcodeNo: formData.barcodeNo,
-          status: formData.status,
-          deploymentPaperRef: formData.deploymentPaperRef,
-          deploymentPaperPhoto: formData.deploymentPaperPhoto
-        };
-      }
-      return c;
-    }));
+          freezer_serial: formData.freezerSerial,
+          barcode_no: formData.barcodeNo,
+          status: formData.status
+        })
+      });
+    } catch (err) {}
 
+    const updated = customers.map(c => c.id === editingCustomer.id ? updatedCust : c);
+    setCustomers(updated);
+    localStorage.setItem('llano_selecta_customers', JSON.stringify(updated));
     setEditingCustomer(null);
   };
 
-  // Add New Customer
-  const handleAddCustomer = (e) => {
+  // Add New Customer with PostgreSQL sync
+  const handleAddCustomer = async (e) => {
     e.preventDefault();
     if (!formData.store_name || !formData.owner) {
       alert('Please fill in Store Name and Owner Name');
@@ -156,7 +213,29 @@ export default function Customers() {
       deploymentPaperRef: formData.deploymentPaperRef || (formData.deploymentPaperPhoto ? `DP-${formData.area.substring(0, 3).toUpperCase()}-2026-${Math.floor(100 + Math.random() * 900)}` : 'Pending Paper')
     };
 
-    setCustomers([newCustomer, ...customers]);
+    try {
+      await fetch('http://localhost:5000/api/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: newCustomer.id,
+          store_name: newCustomer.store_name,
+          owner: newCustomer.owner,
+          area: newCustomer.area,
+          sub_area: newCustomer.subArea,
+          purok: newCustomer.purok,
+          contact: newCustomer.contact,
+          freezer_serial: newCustomer.freezerSerial,
+          barcode_no: newCustomer.barcodeNo,
+          status: newCustomer.status,
+          deployment_paper_ref: newCustomer.deploymentPaperRef
+        })
+      });
+    } catch (err) {}
+
+    const updated = [newCustomer, ...customers];
+    setCustomers(updated);
+    localStorage.setItem('llano_selecta_customers', JSON.stringify(updated));
     setIsAddModalOpen(false);
     setFormData({
       store_name: '',
@@ -209,7 +288,15 @@ export default function Customers() {
             Registered Selecta dealer stores, editable custody profiles, signed deployment agreements, and Barcode/Serial tracking
           </p>
         </div>
-        <button 
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsImportModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-2 shadow-xs"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Import Excel / CSV
+          </button>
+          <button 
           onClick={() => {
             setFormData({
               store_name: '',
@@ -231,6 +318,7 @@ export default function Customers() {
         >
           <Plus className="w-4 h-4" /> Register New Store
         </button>
+        </div>
       </div>
 
       {/* Area Statistics Overview Banner */}
@@ -840,36 +928,40 @@ export default function Customers() {
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Main Area *</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Main Municipality / Area *</label>
                     <select 
                       value={formData.area} 
                       onChange={(e) => {
                         const newArea = e.target.value;
-                        const defaultSub = newArea === 'Valencia' ? 'Batangan' : newArea === 'San Fernando Area' ? 'San Fernando Poblacion' : 'Cabanglasan Centro';
+                        const defaultSub = newArea === 'Valencia' 
+                          ? 'Batangan' 
+                          : newArea === 'San Fernando' 
+                            ? 'Halapitan (Poblacion)' 
+                            : 'Poblacion (Cabanglasan Centro)';
                         setFormData({...formData, area: newArea, subArea: defaultSub});
                       }}
-                      className="input-field text-xs bg-white"
+                      className="input-field text-xs bg-white font-bold"
                     >
-                      <option value="Valencia">Valencia</option>
-                      <option value="San Fernando Area">San Fernando Area</option>
-                      <option value="Cabanglasan Area">Cabanglasan Area</option>
+                      <option value="Valencia">Valencia City</option>
+                      <option value="Cabanglasan">Cabanglasan</option>
+                      <option value="San Fernando">San Fernando</option>
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Barangay / Sub-Location *</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Official Barangay *</label>
                     <select 
                       value={formData.subArea} 
                       onChange={(e) => setFormData({...formData, subArea: e.target.value})}
-                      className="input-field text-xs bg-white"
+                      className="input-field text-xs bg-white font-bold"
                     >
-                      {formData.area === 'Valencia' && valenciaSubAreas.map(sub => (
+                      {(formData.area.includes('Valencia') || formData.area === 'Valencia') && valenciaSubAreas.map(sub => (
                         <option key={sub} value={sub}>{sub}</option>
                       ))}
-                      {formData.area === 'San Fernando Area' && sanFernandoSubAreas.map(sub => (
+                      {(formData.area.includes('San Fernando') || formData.area === 'San Fernando') && sanFernandoSubAreas.map(sub => (
                         <option key={sub} value={sub}>{sub}</option>
                       ))}
-                      {formData.area === 'Cabanglasan Area' && cabanglasanSubAreas.map(sub => (
+                      {(formData.area.includes('Cabanglasan') || formData.area === 'Cabanglasan') && cabanglasanSubAreas.map(sub => (
                         <option key={sub} value={sub}>{sub}</option>
                       ))}
                     </select>
@@ -881,11 +973,17 @@ export default function Customers() {
                   <input 
                     type="text" 
                     required 
+                    list="common-puroks-datalist"
                     placeholder="e.g. Purok 3 (Near Central Elementary School)" 
                     value={formData.purok}
                     onChange={(e) => setFormData({...formData, purok: e.target.value})}
                     className="input-field text-xs bg-white" 
                   />
+                  <datalist id="common-puroks-datalist">
+                    {COMMON_PUROKS.map(pk => (
+                      <option key={pk} value={pk} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 
@@ -969,6 +1067,7 @@ export default function Customers() {
           </div>
         </div>
       )}
+      <ExcelImportModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onImportSuccess={() => window.location.reload()} type="customers" />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Snowflake, 
   Camera, 
@@ -32,8 +32,7 @@ import { INITIAL_CUSTOMERS } from '../utils/productCatalog';
 export default function Freezers() {
   const currentMonth = 'October 2026';
 
-  // Freezers catalog & assignments
-  const [freezers, setFreezers] = useState([
+  const INITIAL_FREEZERS = [
     {
       id: 'FRZ-001',
       serialNumber: 'SEL-FRZ-8821',
@@ -156,11 +155,138 @@ export default function Freezers() {
         status: 'Completed',
         photoProof: null
       }
+    },
+    {
+      id: 'FRZ-005',
+      serialNumber: 'SEL-FRZ-9011',
+      barcode: 'FRZ4800019205',
+      model: 'Glass Top Display 300L',
+      condition: 'Good',
+      status: 'Deployed',
+      assignedStore: 'Cabanglasan Highland Corner',
+      storeOwner: 'Ramon Santos',
+      pastOwner: null,
+      area: 'Cabanglasan',
+      assignmentDate: '2026-02-28',
+      transferHistory: [],
+      pullOutNotes: '',
+      pullOutDate: null,
+      payment: {
+        productAllocation: 9000.00,
+        processingFee: 1000.00,
+        totalPaid: 10000.00,
+        paymentDate: '2026-02-28',
+        receiptRef: 'OR-FRZ-005'
+      },
+      lastScan: {
+        month: 'October 2026',
+        scanDateTime: '2026-10-06T11:00',
+        staff: 'Juan Booker',
+        status: 'Completed',
+        photoProof: 'https://images.unsplash.com/photo-1584992236310-6edddc08acff?auto=format&fit=crop&q=80&w=400'
+      }
+    },
+    {
+      id: 'FRZ-006',
+      serialNumber: 'SEL-FRZ-9104',
+      barcode: 'FRZ4800019206',
+      model: 'Chest Freezer 400L',
+      condition: 'Good',
+      status: 'Deployed',
+      assignedStore: 'Halapitan Trading Post',
+      storeOwner: 'Danilo Reyes',
+      pastOwner: null,
+      area: 'San Fernando',
+      assignmentDate: '2026-04-01',
+      transferHistory: [],
+      pullOutNotes: '',
+      pullOutDate: null,
+      payment: {
+        productAllocation: 9000.00,
+        processingFee: 1000.00,
+        totalPaid: 10000.00,
+        paymentDate: '2026-04-01',
+        receiptRef: 'OR-FRZ-006'
+      },
+      lastScan: {
+        month: 'October 2026',
+        scanDateTime: null,
+        staff: null,
+        status: 'Pending',
+        photoProof: null
+      }
     }
-  ]);
+  ];
+
+  // Freezers catalog & assignments
+  const [freezers, setFreezers] = useState(() => {
+    try {
+      const saved = localStorage.getItem('llano_selecta_freezers');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return INITIAL_FREEZERS;
+  });
+
+  // Fetch freezers from PostgreSQL database on mount
+  useEffect(() => {
+    const fetchFreezers = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/freezers');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            const mapped = data.map(f => ({
+              id: f.id,
+              serialNumber: f.serial_number || f.serialNumber,
+              barcode: f.barcode_no || f.barcode,
+              model: f.model || 'Chest Freezer 300L',
+              condition: f.condition || 'Good',
+              status: f.status || 'Deployed',
+              assignedStore: f.assigned_store || f.assignedStore || 'Unassigned',
+              storeOwner: f.assigned_owner || f.storeOwner || 'Store Client',
+              pastOwner: f.pastOwner || null,
+              area: f.area || 'Valencia',
+              assignmentDate: f.custody_agreement_date ? f.custody_agreement_date.split('T')[0] : f.assignmentDate,
+              transferHistory: Array.isArray(f.transferHistory) ? f.transferHistory : [],
+              pullOutNotes: f.pullOutNotes || '',
+              pullOutDate: f.pullOutDate || null,
+              payment: f.payment || {
+                productAllocation: 9000.00,
+                processingFee: 1000.00,
+                totalPaid: Number(f.deployment_fee || 10000.00),
+                paymentDate: f.custody_agreement_date ? f.custody_agreement_date.split('T')[0] : '2026-01-15',
+                receiptRef: `OR-${f.id}`
+              },
+              lastScan: f.lastScan || {
+                month: currentMonth,
+                scanDateTime: f.timemark_verified ? '2026-10-05T14:30' : null,
+                staff: 'Juan Booker',
+                status: f.timemark_verified ? 'Completed' : 'Pending',
+                photoProof: null
+              }
+            }));
+            setFreezers(mapped);
+            localStorage.setItem('llano_selecta_freezers', JSON.stringify(mapped));
+          }
+        }
+      } catch (err) {}
+    };
+
+    fetchFreezers();
+  }, []);
+
+  // Save freezers state
+  useEffect(() => {
+    try {
+      localStorage.setItem('llano_selecta_freezers', JSON.stringify(freezers));
+    } catch (e) {}
+  }, [freezers]);
 
   const [activeTab, setActiveTab] = useState('catalog'); // 'catalog' | 'timemark'
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchBarcode, setSearchBarcode] = useState('');
+  const [searchSerial, setSearchSerial] = useState('');
+  const [searchStore, setSearchStore] = useState('');
+  const [filterArea, setFilterArea] = useState('All'); // 'All' | 'Valencia' | 'Cabanglasan' | 'San Fernando'
   const [filterCustody, setFilterCustody] = useState('All'); // 'All' | 'Deployed' | 'Pull Out' | 'In Warehouse'
   const [filterScanStatus, setFilterScanStatus] = useState('All'); // 'All' | 'Pending' | 'Completed'
 
@@ -206,8 +332,8 @@ export default function Freezers() {
     }
   };
 
-  // Handle Assign Freezer Submission
-  const handleSaveAssignment = () => {
+  // Handle Assign Freezer Submission with PostgreSQL sync
+  const handleSaveAssignment = async () => {
     if (!formSerialNum.trim() || !formStore.trim()) {
       alert('Please fill in the Freezer Serial # and store name.');
       return;
@@ -244,7 +370,27 @@ export default function Freezers() {
       }
     };
 
-    setFreezers([newFreezer, ...freezers]);
+    try {
+      await fetch('http://localhost:5000/api/freezers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: newFreezer.id,
+          serial_number: newFreezer.serialNumber,
+          barcode_no: newFreezer.barcode,
+          model: newFreezer.model,
+          assigned_store: newFreezer.assignedStore,
+          assigned_owner: newFreezer.storeOwner,
+          status: newFreezer.status,
+          custody_agreement_date: newFreezer.assignmentDate,
+          deployment_fee: 10000.00
+        })
+      });
+    } catch (err) {}
+
+    const updated = [newFreezer, ...freezers];
+    setFreezers(updated);
+    localStorage.setItem('llano_selecta_freezers', JSON.stringify(updated));
     setIsAssignModalOpen(false);
     setFormSerialNum('');
     setFormBarcode('');
@@ -252,8 +398,8 @@ export default function Freezers() {
     setFormOwner('');
   };
 
-  // Handle Transfer of Owner
-  const handleConfirmTransfer = () => {
+  // Handle Transfer of Owner with PostgreSQL sync
+  const handleConfirmTransfer = async () => {
     if (!transferModalFreezer || !transferNewStore.trim()) {
       alert('Please enter the new store name.');
       return;
@@ -284,15 +430,28 @@ export default function Freezers() {
       return f;
     });
 
+    try {
+      await fetch(`http://localhost:5000/api/freezers/${transferModalFreezer.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assigned_store: transferNewStore,
+          assigned_owner: transferNewOwner || 'New Owner',
+          status: 'Deployed'
+        })
+      });
+    } catch (err) {}
+
     setFreezers(updated);
+    localStorage.setItem('llano_selecta_freezers', JSON.stringify(updated));
     setTransferModalFreezer(null);
     setTransferNewStore('');
     setTransferNewOwner('');
     setTransferReason('');
   };
 
-  // Handle Pull Out Freezer
-  const handleConfirmPullOut = () => {
+  // Handle Pull Out Freezer with PostgreSQL sync
+  const handleConfirmPullOut = async () => {
     if (!pullOutModalFreezer) return;
 
     const updated = freezers.map(f => {
@@ -310,7 +469,20 @@ export default function Freezers() {
       return f;
     });
 
+    try {
+      await fetch(`http://localhost:5000/api/freezers/${pullOutModalFreezer.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'Pull Out',
+          assigned_store: 'Llano Main Warehouse',
+          assigned_owner: 'Llano Bodega Central'
+        })
+      });
+    } catch (err) {}
+
     setFreezers(updated);
+    localStorage.setItem('llano_selecta_freezers', JSON.stringify(updated));
     setPullOutModalFreezer(null);
     setPullOutNotes('');
   };
@@ -348,20 +520,37 @@ export default function Freezers() {
   const completedScans = freezers.filter(f => f.status === 'Deployed' && f.lastScan?.status === 'Completed').length;
   const pendingScans = freezers.filter(f => f.status === 'Deployed' && (f.lastScan?.status === 'Pending' || f.lastScan?.status === 'Missed')).length;
 
+  const getFreezerAreaKey = (f) => {
+    const norm = `${f.area || ''} ${f.assignedStore || ''}`.toLowerCase();
+    if (norm.includes('caban') || norm.includes('cabal')) return 'Cabanglasan';
+    if (norm.includes('fernando') || norm.includes('sanfernando') || norm.includes('halapitan')) return 'San Fernando';
+    return 'Valencia';
+  };
+
+  const valenciaFreezersCount = freezers.filter(f => getFreezerAreaKey(f) === 'Valencia').length;
+  const cabanglasanFreezersCount = freezers.filter(f => getFreezerAreaKey(f) === 'Cabanglasan').length;
+  const sanFernandoFreezersCount = freezers.filter(f => getFreezerAreaKey(f) === 'San Fernando').length;
+
   const filteredFreezers = freezers.filter(f => {
-    const matchesSearch = f.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          f.barcode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          f.assignedStore.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (f.pastOwner && f.pastOwner.toLowerCase().includes(searchTerm.toLowerCase()));
-    
+    const matchesBarcode = !searchBarcode.trim() || (f.barcode && f.barcode.toLowerCase().includes(searchBarcode.toLowerCase().trim()));
+    const matchesSerial = !searchSerial.trim() || (f.serialNumber && f.serialNumber.toLowerCase().includes(searchSerial.toLowerCase().trim()));
+    const matchesStore = !searchStore.trim() || 
+      (f.assignedStore && f.assignedStore.toLowerCase().includes(searchStore.toLowerCase().trim())) ||
+      (f.storeOwner && f.storeOwner.toLowerCase().includes(searchStore.toLowerCase().trim())) ||
+      (f.pastOwner && f.pastOwner.toLowerCase().includes(searchStore.toLowerCase().trim()));
+
+    if (!matchesBarcode || !matchesSerial || !matchesStore) return false;
+
+    if (filterArea !== 'All' && getFreezerAreaKey(f) !== filterArea) return false;
+
     if (filterCustody !== 'All' && f.status !== filterCustody) return false;
 
     if (activeTab === 'timemark') {
-      if (filterScanStatus === 'Pending') return matchesSearch && (f.lastScan?.status === 'Pending' || f.lastScan?.status === 'Missed');
-      if (filterScanStatus === 'Completed') return matchesSearch && f.lastScan?.status === 'Completed';
+      if (filterScanStatus === 'Pending') return (f.lastScan?.status === 'Pending' || f.lastScan?.status === 'Missed');
+      if (filterScanStatus === 'Completed') return f.lastScan?.status === 'Completed';
     }
 
-    return matchesSearch;
+    return true;
   });
 
   return (
@@ -417,61 +606,76 @@ export default function Freezers() {
 
         <div className="card border-l-4 border-l-brand-red flex items-center gap-3">
           <div className="p-3 bg-brand-light text-brand-red rounded-lg">
-            <Camera className="w-5 h-5" />
+            <Snowflake className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Monthly Scans ({currentMonth})</p>
-            <h3 className="text-lg font-bold text-slate-900">{completedScans} Done / {pendingScans} Due</h3>
-            <span className="text-[11px] text-brand-red font-semibold">{pendingScans} Require Action</span>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Deployed Assets</p>
+            <h3 className="text-lg font-bold text-slate-900">{deployedCount} Deployed Units</h3>
+            <span className="text-[11px] text-emerald-600 font-semibold">Active in Partner Stores</span>
           </div>
         </div>
       </div>
 
-      {/* Tabs Bar */}
-      <div className="flex border-b border-slate-200 gap-6">
-        <button 
-          onClick={() => setActiveTab('catalog')}
-          className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors ${
-            activeTab === 'catalog' 
-              ? 'border-brand-red text-brand-red' 
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Snowflake className="w-4 h-4" /> Freezer Serial # Catalog & Custody
-        </button>
-        <button 
-          onClick={() => setActiveTab('timemark')}
-          className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors ${
-            activeTab === 'timemark' 
-              ? 'border-brand-red text-brand-red' 
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Camera className="w-4 h-4" /> Barcode Scans & Proof Verification ({pendingScans} Action Needed)
-        </button>
-      </div>
-
       {/* Main Table Card */}
       <div className="card space-y-4">
-        {/* Search & Filters */}
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Search Freezer Serial #, Barcode No., store name, or past owner..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="input-field pl-9"
-            />
+        {/* Area Filtering Tabs / Pills */}
+        <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wide flex items-center gap-1 mr-1">
+              <MapPin className="w-3.5 h-3.5 text-brand-red" /> Filter Area:
+            </span>
+            <button
+              type="button"
+              onClick={() => setFilterArea('All')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                filterArea === 'All'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              All Municipalities ({totalFreezers})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterArea('Valencia')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                filterArea === 'Valencia'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-white text-blue-700 hover:bg-blue-50 border border-blue-200'
+              }`}
+            >
+              Valencia ({valenciaFreezersCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterArea('Cabanglasan')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                filterArea === 'Cabanglasan'
+                  ? 'bg-purple-600 text-white shadow-xs'
+                  : 'bg-white text-purple-700 hover:bg-purple-50 border border-purple-200'
+              }`}
+            >
+              Cabanglasan ({cabanglasanFreezersCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterArea('San Fernando')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                filterArea === 'San Fernando'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'bg-white text-amber-800 hover:bg-amber-50 border border-amber-200'
+              }`}
+            >
+              San Fernando ({sanFernandoFreezersCount})
+            </button>
           </div>
 
           <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-slate-400" />
+            <Filter className="w-3.5 h-3.5 text-slate-400" />
             <select 
               value={filterCustody} 
               onChange={(e) => setFilterCustody(e.target.value)}
-              className="input-field cursor-pointer sm:w-48 text-xs font-semibold"
+              className="input-field cursor-pointer py-1.5 text-xs font-semibold bg-white"
             >
               <option value="All">All Custody Statuses</option>
               <option value="Deployed">Deployed (Active Store)</option>
@@ -479,24 +683,110 @@ export default function Freezers() {
               <option value="In Warehouse">In Warehouse (Unassigned)</option>
             </select>
           </div>
-
-          {activeTab === 'timemark' && (
-            <select 
-              value={filterScanStatus} 
-              onChange={(e) => setFilterScanStatus(e.target.value)}
-              className="input-field cursor-pointer sm:w-44 text-xs font-semibold"
-            >
-              <option value="All">All Scan Statuses</option>
-              <option value="Pending">Pending Scan Only</option>
-              <option value="Completed">Completed Only</option>
-            </select>
-          )}
         </div>
 
-        {/* Tab 1: Catalog Table */}
-        {activeTab === 'catalog' && (
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full text-left border-collapse">
+        {/* Separated Search Inputs: Barcode, Serial, and Store Name */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/* 1. Barcode Search */}
+          <div className="relative">
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+              Search by Barcode
+            </label>
+            <div className="relative">
+              <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="e.g. FRZ4800019201" 
+                value={searchBarcode}
+                onChange={(e) => setSearchBarcode(e.target.value)}
+                className="input-field pl-9 text-xs"
+              />
+              {searchBarcode && (
+                <button 
+                  onClick={() => setSearchBarcode('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 2. Serial Number Search */}
+          <div className="relative">
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+              Search by Serial #
+            </label>
+            <div className="relative">
+              <Snowflake className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="e.g. SEL-FRZ-8821" 
+                value={searchSerial}
+                onChange={(e) => setSearchSerial(e.target.value)}
+                className="input-field pl-9 text-xs uppercase"
+              />
+              {searchSerial && (
+                <button 
+                  onClick={() => setSearchSerial('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 3. Store Name Search */}
+          <div className="relative">
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+              Search by Store Name / Owner
+            </label>
+            <div className="relative">
+              <Store className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="e.g. Aling Nena, San Isidro, etc." 
+                value={searchStore}
+                onChange={(e) => setSearchStore(e.target.value)}
+                className="input-field pl-9 text-xs"
+              />
+              {searchStore && (
+                <button 
+                  onClick={() => setSearchStore('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Clear Filters Indicator */}
+        {(searchBarcode || searchSerial || searchStore || filterArea !== 'All' || filterCustody !== 'All') && (
+          <div className="flex items-center justify-between text-xs bg-red-50/50 p-2 rounded-lg border border-red-100">
+            <span className="text-slate-600 font-medium">
+              Filters active: Showing <strong>{filteredFreezers.length}</strong> of {totalFreezers} freezers
+            </span>
+            <button
+              onClick={() => {
+                setSearchBarcode('');
+                setSearchSerial('');
+                setSearchStore('');
+                setFilterArea('All');
+                setFilterCustody('All');
+              }}
+              className="text-brand-red font-bold hover:underline flex items-center gap-1"
+            >
+              <RotateCcw className="w-3 h-3" /> Reset / Clear All Filters
+            </button>
+          </div>
+        )}
+
+        {/* Catalog Table */}
+        <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
                   <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Freezer Serial #</th>
@@ -523,8 +813,15 @@ export default function Freezers() {
                         <div className="text-xs text-slate-600 flex items-center gap-1">
                           <User className="w-3 h-3 text-slate-400" /> Owner: <span className="font-semibold">{f.storeOwner}</span>
                         </div>
-                        <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                          <MapPin className="w-3 h-3 text-brand-red" /> {f.area}
+                        <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-1">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border ${
+                            getFreezerAreaKey(f) === 'Cabanglasan' ? 'bg-purple-100 text-purple-800 border-purple-200' :
+                            getFreezerAreaKey(f) === 'San Fernando' ? 'bg-amber-100 text-amber-800 border-amber-200' :
+                            'bg-blue-100 text-blue-800 border-blue-200'
+                          }`}>
+                            {getFreezerAreaKey(f)}
+                          </span>
+                          <span className="text-[11px] text-slate-400">{f.area}</span>
                         </div>
                       </td>
                       <td className="py-3 px-4">
@@ -612,110 +909,6 @@ export default function Freezers() {
               </tbody>
             </table>
           </div>
-        )}
-
-        {/* Tab 2: Timemark Verification Table */}
-        {activeTab === 'timemark' && (
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Store & Freezer Serial #</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Custody Status</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Scan Date & Time</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Auditor / Booker</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Replaceable Photo Proof</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Verification</th>
-                  <th className="py-3 px-4 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 bg-white">
-                {filteredFreezers.length > 0 ? (
-                  filteredFreezers.map((f) => (
-                    <tr key={f.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="text-sm font-bold text-slate-800">{f.assignedStore}</div>
-                        <div className="text-xs text-brand-red font-mono font-bold">{f.serialNumber}</div>
-                        <div className="text-[11px] text-slate-400 font-mono">Barcode: {f.barcode}</div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
-                          f.status === 'Deployed' ? 'bg-emerald-100 text-emerald-800' :
-                          f.status === 'Pull Out' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'
-                        }`}>
-                          {f.status}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-xs font-semibold text-slate-800">
-                        {f.lastScan?.scanDateTime ? (
-                          <div>
-                            <div className="text-slate-800 font-bold">{f.lastScan.scanDateTime.replace('T', ' ')}</div>
-                            <div className="text-[10px] text-slate-400">Scanned on site</div>
-                          </div>
-                        ) : (
-                          <span className="text-amber-600 italic">Not scanned this month</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-xs text-slate-600">
-                        {f.lastScan?.staff || <span className="text-slate-400">Pending Assignment</span>}
-                      </td>
-                      <td className="py-3 px-4">
-                        {f.lastScan?.photoProof ? (
-                          <div className="flex items-center gap-2">
-                            <img 
-                              src={f.lastScan.photoProof} 
-                              alt="Scan Proof" 
-                              className="w-10 h-10 object-cover rounded-md border border-slate-200 shadow-2xs cursor-pointer hover:opacity-80"
-                              onClick={() => setViewDetailsFreezer(f)}
-                            />
-                            <span 
-                              className="text-xs text-blue-600 hover:underline cursor-pointer font-medium"
-                              onClick={() => setViewDetailsFreezer(f)}
-                            >
-                              View Photo
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-slate-400 italic">No photo proof</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                          f.lastScan?.status === 'Completed' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
-                          f.lastScan?.status === 'Pending' ? 'bg-amber-100 text-amber-800 border-amber-200' :
-                          'bg-red-100 text-red-800 border-red-200'
-                        }`}>
-                          {f.lastScan?.status === 'Completed' ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
-                          {f.lastScan?.status === 'Completed' ? 'Verified' : 'Pending'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <button 
-                          onClick={() => {
-                            setScanModalFreezer(f);
-                            setScanDateTime(f.lastScan?.scanDateTime || new Date().toISOString().slice(0, 16));
-                            setScanStaff(f.lastScan?.staff || 'Juan Booker');
-                            setScanPhotoUrl(f.lastScan?.photoProof || '');
-                          }}
-                          className="btn-primary text-xs py-1 px-2.5 inline-flex items-center gap-1"
-                        >
-                          <Camera className="w-3.5 h-3.5" /> {f.lastScan?.photoProof ? 'Replace / Update' : 'Log Scan'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="7" className="py-8 text-center text-slate-500">
-                      <Camera className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-                      No freezers found matching criteria.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
 
       {/* Register / Assign Freezer Modal */}
@@ -786,14 +979,16 @@ export default function Freezers() {
                   onChange={(e) => setFormArea(e.target.value)}
                   className="input-field cursor-pointer text-xs"
                 >
-                  <option value="Valencia City (Batangan)">Valencia City: Batangan</option>
-                  <option value="Valencia City (Kahaponan)">Valencia City: Kahaponan</option>
-                  <option value="Valencia City (Ventar)">Valencia City: Ventar</option>
-                  <option value="Valencia City (San-Isidro)">Valencia City: San-Isidro</option>
-                  <option value="Valencia City (Sinabuagan)">Valencia City: Sinabuagan</option>
-                  <option value="Valencia City (Lumbayao)">Valencia City: Lumbayao</option>
-                  <option value="San Fernando Area">San Fernando Area</option>
-                  <option value="Cabanglasan Area">Cabanglasan Area</option>
+                  <option value="Valencia City (Batangan)">Valencia: Batangan</option>
+                  <option value="Valencia City (Poblacion)">Valencia: Poblacion</option>
+                  <option value="Valencia City (Kahaponan)">Valencia: Kahaponan</option>
+                  <option value="Valencia City (San-Isidro)">Valencia: San-Isidro</option>
+                  <option value="Valencia City (Sinabuagan)">Valencia: Sinabuagan</option>
+                  <option value="Cabanglasan (Poblacion Centro)">Cabanglasan: Poblacion Centro</option>
+                  <option value="Cabanglasan (Mandaing)">Cabanglasan: Mandaing</option>
+                  <option value="Cabanglasan (Anlogan)">Cabanglasan: Anlogan</option>
+                  <option value="San Fernando (Halapitan)">San Fernando: Halapitan</option>
+                  <option value="San Fernando (Poblacion)">San Fernando: Poblacion</option>
                 </select>
               </div>
 
@@ -898,14 +1093,16 @@ export default function Freezers() {
                   onChange={(e) => setTransferNewArea(e.target.value)}
                   className="input-field cursor-pointer text-xs"
                 >
-                  <option value="Valencia City (Batangan)">Valencia City: Batangan</option>
-                  <option value="Valencia City (Kahaponan)">Valencia City: Kahaponan</option>
-                  <option value="Valencia City (Ventar)">Valencia City: Ventar</option>
-                  <option value="Valencia City (San-Isidro)">Valencia City: San-Isidro</option>
-                  <option value="Valencia City (Sinabuagan)">Valencia City: Sinabuagan</option>
-                  <option value="Valencia City (Lumbayao)">Valencia City: Lumbayao</option>
-                  <option value="San Fernando Area">San Fernando Area</option>
-                  <option value="Cabanglasan Area">Cabanglasan Area</option>
+                  <option value="Valencia City (Batangan)">Valencia: Batangan</option>
+                  <option value="Valencia City (Poblacion)">Valencia: Poblacion</option>
+                  <option value="Valencia City (Kahaponan)">Valencia: Kahaponan</option>
+                  <option value="Valencia City (San-Isidro)">Valencia: San-Isidro</option>
+                  <option value="Valencia City (Sinabuagan)">Valencia: Sinabuagan</option>
+                  <option value="Cabanglasan (Poblacion Centro)">Cabanglasan: Poblacion Centro</option>
+                  <option value="Cabanglasan (Mandaing)">Cabanglasan: Mandaing</option>
+                  <option value="Cabanglasan (Anlogan)">Cabanglasan: Anlogan</option>
+                  <option value="San Fernando (Halapitan)">San Fernando: Halapitan</option>
+                  <option value="San Fernando (Poblacion)">San Fernando: Poblacion</option>
                 </select>
               </div>
 
@@ -981,111 +1178,6 @@ export default function Freezers() {
               <button onClick={handleConfirmPullOut} className="btn-primary text-xs bg-amber-600 hover:bg-amber-700">
                 Confirm Pull Out to Warehouse
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Record Timemark Scan Modal */}
-      {scanModalFreezer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
-              <div className="flex items-center gap-2">
-                <Camera className="w-5 h-5 text-brand-red" />
-                <h2 className="text-lg font-bold text-slate-800">Record Barcode Scan Proof</h2>
-              </div>
-              <button onClick={() => setScanModalFreezer(null)} className="text-slate-400 hover:text-slate-600 p-1">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4">
-              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs space-y-1">
-                <div className="font-bold text-slate-900 text-sm">{scanModalFreezer.assignedStore}</div>
-                <div className="text-brand-red font-mono font-bold">Freezer Serial #: {scanModalFreezer.serialNumber}</div>
-                <div className="text-slate-500 font-mono">Barcode: {scanModalFreezer.barcode}</div>
-                <div className="text-slate-500">Monitoring Month: <strong>{currentMonth}</strong></div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Specific Date & Time of Scanning <span className="text-brand-red">*</span></label>
-                <input 
-                  type="datetime-local" 
-                  value={scanDateTime}
-                  onChange={(e) => setScanDateTime(e.target.value)}
-                  className="input-field text-xs font-medium" 
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Staff Who Performed Scan</label>
-                <select 
-                  value={scanStaff}
-                  onChange={(e) => setScanStaff(e.target.value)}
-                  className="input-field cursor-pointer text-xs"
-                >
-                  <option>Juan Booker</option>
-                  <option>Pedro Driver</option>
-                  <option>Roberto Backride</option>
-                  <option>Maria Checker</option>
-                </select>
-              </div>
-
-              {/* Replaceable Device Photo Upload */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
-                  Upload Scan Proof Photo (From Device)
-                </label>
-                <div className="border border-dashed border-slate-300 rounded-lg p-3 text-center bg-slate-50 space-y-2">
-                  {scanPhotoUrl ? (
-                    <div className="space-y-2">
-                      <div className="relative rounded-lg overflow-hidden border border-slate-200 max-h-48 mx-auto">
-                        <img 
-                          src={scanPhotoUrl} 
-                          alt="Proof preview" 
-                          className="w-full h-40 object-cover" 
-                        />
-                      </div>
-                      <div className="flex justify-center gap-2">
-                        <label className="btn-secondary text-xs py-1 px-2.5 cursor-pointer flex items-center gap-1">
-                          <Upload className="w-3.5 h-3.5" /> Replace Photo
-                          <input 
-                            type="file" 
-                            accept="image/*" 
-                            className="hidden" 
-                            onChange={handleScanPhotoUpload} 
-                          />
-                        </label>
-                        <button 
-                          type="button" 
-                          onClick={() => setScanPhotoUrl('')}
-                          className="btn-secondary text-xs py-1 px-2.5 text-red-600 hover:bg-red-50"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <label className="cursor-pointer block py-4">
-                      <Camera className="w-8 h-8 mx-auto text-slate-400 mb-1" />
-                      <span className="text-xs font-bold text-brand-red block">Click to select photo from device</span>
-                      <span className="text-[11px] text-slate-400">PNG, JPG, or camera capture</span>
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        className="hidden" 
-                        onChange={handleScanPhotoUpload} 
-                      />
-                    </label>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
-              <button onClick={() => setScanModalFreezer(null)} className="btn-secondary text-xs">Cancel</button>
-              <button onClick={handleSaveScan} className="btn-primary text-xs">Confirm & Save Scan</button>
             </div>
           </div>
         </div>
